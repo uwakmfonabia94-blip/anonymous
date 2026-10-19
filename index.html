@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0E0E14">
+  <meta name="color-scheme" content="dark">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Anonymous — Say it. Nobody knows.</title>
+  <meta name="description" content="Your campus. No names.">
+  <meta property="og:title" content="Anonymous">
+  <meta property="og:description" content="Say it. Nobody knows.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.73 5.08a10.74 10.74 0 0 1 11.21 6.57 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-1.45 2.49"/><path d="M14.08 14.16a3 3 0 0 1-4.24-4.24"/><path d="M17.48 17.5a10.75 10.75 0 0 1-15.42-5.15 1 1 0 0 1 0-.7 10.75 10.75 0 0 1 4.45-5.14"/><path d="m2 2 20 20"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></symbol>
+
+  <symbol id="sh-circle" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="7"/></symbol>
+  <symbol id="sh-triangle" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5 L20 19 L4 19 Z"/></symbol>
+  <symbol id="sh-diamond" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 L20 12 L12 20 L4 12 Z"/></symbol>
+  <symbol id="sh-square" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="sh-pentagon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 L20 10 L17 19 L7 19 L4 10 Z"/></symbol>
+  <symbol id="sh-hexagon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5 L16 5 L20 12 L16 19 L8 19 L4 12 Z"/></symbol>
+  <symbol id="sh-star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 L14.4 10.2 L21 10.5 L16 14.5 L17.7 21 L12 17.5 L6.3 21 L8 14.5 L3 10.5 L9.6 10.2 Z"/></symbol>
+  <symbol id="sh-moon" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6 A8 8 0 1 0 16 18 A6 6 0 1 1 16 6 Z"/></symbol>
+</svg>
+
+<div id="app" class="app-shell">
+  <header class="app-header">
+    <a class="brand" href="/">
+      <span class="brand__dot" aria-hidden="true"></span>
+      <span class="brand__name">Anonymous</span>
+    </a>
+    <button class="btn btn--ghost btn--sm" data-action="join" type="button" id="header-join">Join</button>
+  </header>
+
+  <main id="view-root" class="view-root"></main>
+
+  <nav class="bottom-nav" aria-label="Primary">
+    <a class="bottom-nav__item" href="/" data-route="home">
+      <svg class="icon icon--24"><use href="#i-home"/></svg>
+      <span>Home</span>
+    </a>
+    <a class="bottom-nav__item" href="/activity" data-route="activity">
+      <svg class="icon icon--24"><use href="#i-bell"/></svg>
+      <span>Activity</span>
+      <span class="bottom-nav__badge" id="nav-badge" hidden></span>
+    </a>
+    <button class="bottom-nav__compose" aria-label="Compose" data-action="compose" type="button">
+      <svg class="icon icon--24"><use href="#i-plus"/></svg>
+    </button>
+    <a class="bottom-nav__item" href="/discover" data-route="discover">
+      <svg class="icon icon--24"><use href="#i-compass"/></svg>
+      <span>Discover</span>
+    </a>
+    <a class="bottom-nav__item" href="/me" data-route="me">
+      <svg class="icon icon--24"><use href="#i-user"/></svg>
+      <span>Me</span>
+    </a>
+  </nav>
+</div>
+
+<!-- ===================== TEMPLATES ===================== -->
+
+<template id="tpl-feed-screen">
+  <div class="screen screen--feed">
+    <section class="pin-banner">
+      <span class="pin-banner__label">Today</span>
+      <p class="pin-banner__text">What's the most unhinged thing that happened on campus today?</p>
+    </section>
+    <div class="feed-list" data-role="feed"></div>
+    <div data-role="sentinel" style="height:1px"></div>
+  </div>
+</template>
+
+<template id="tpl-post-card">
+  <article class="post-card" data-post-id="">
+    <header class="post-card__header">
+      <span class="avatar" aria-hidden="true"></span>
+      <div class="post-card__meta">
+        <span class="post-card__alias"></span>
+        <span class="post-card__dot">·</span>
+        <span class="post-card__time"></span>
+        <span class="post-card__dot post-card__category-dot" hidden>·</span>
+        <span class="post-card__category" hidden></span>
+      </div>
+      <button class="post-card__menu" data-action="more" aria-label="More options">
+        <svg class="icon icon--18"><use href="#i-more"/></svg>
+      </button>
+    </header>
+    <p class="post-card__body"></p>
+    <footer class="post-card__actions">
+      <button class="post-card__action" data-action="vote" aria-label="Upvote">
+        <svg class="icon icon--18"><use href="#i-heart"/></svg><span class="post-card__count">0</span>
+      </button>
+      <button class="post-card__action" data-action="open" aria-label="Comments">
+        <svg class="icon icon--18"><use href="#i-message"/></svg><span class="post-card__count">0</span>
+      </button>
+      <button class="post-card__action" data-action="share" aria-label="Share">
+        <svg class="icon icon--18"><use href="#i-share"/></svg>
+      </button>
+    </footer>
+  </article>
+</template>
+
+<template id="tpl-post-detail">
+  <div class="screen screen--post">
+    <div class="screen__header">
+      <button class="btn btn--ghost btn--icon" data-action="back" aria-label="Back">
+        <svg class="icon icon--24"><use href="#i-arrow-left"/></svg>
+      </button>
+    </div>
+    <div data-role="post"></div>
+    <section class="comments">
+      <h2 class="comments__heading" data-role="comments-heading">Comments</h2>
+      <div class="comments__list" data-role="comments"></div>
+    </section>
+    <form class="reply-bar" data-role="reply-form">
+      <input class="reply-bar__input" type="text" placeholder="Reply anonymously…" maxlength="300" data-role="reply-input">
+      <button class="reply-bar__send btn btn--primary btn--icon" type="submit" aria-label="Send">
+        <svg class="icon icon--20"><use href="#i-arrow-left"/></svg>
+      </button>
+    </form>
+  </div>
+</template>
+
+<template id="tpl-comment">
+  <article class="comment">
+    <header class="comment__header">
+      <span class="avatar avatar--sm" aria-hidden="true"></span>
+      <span class="comment__alias"></span>
+      <span class="comment__time"></span>
+    </header>
+    <p class="comment__body"></p>
+    <button class="comment__reply" data-action="reply">Reply</button>
+    <div class="comment__replies" data-role="replies"></div>
+  </article>
+</template>
+
+<template id="tpl-compose">
+  <div class="compose">
+    <header class="compose__header">
+      <button class="btn btn--ghost btn--icon" data-action="close" aria-label="Close">
+        <svg class="icon icon--24"><use href="#i-x"/></svg>
+      </button>
+      <button class="btn btn--primary btn--sm" data-action="submit" disabled>Post</button>
+    </header>
+    <textarea class="compose__textarea" placeholder="What's on your mind?" maxlength="300" rows="8" data-role="textarea"></textarea>
+    <div class="compose__counter"><span data-role="counter">0</span>/300</div>
+    <div class="compose__chips" data-role="chips">
+      <button type="button" class="chip" data-cat="Confession">#Confession</button>
+      <button type="button" class="chip" data-cat="Question">#Question</button>
+      <button type="button" class="chip" data-cat="CampusLife">#CampusLife</button>
+      <button type="button" class="chip" data-cat="Rant">#Rant</button>
+      <button type="button" class="chip" data-cat="Wholesome">#Wholesome</button>
+    </div>
+    <label class="checkbox compose__shareable">
+      <input type="checkbox" checked data-role="shareable">
+      <span>Allow link previews (shows your post when shared)</span>
+    </label>
+    <p class="compose__footnote">Posting means you've read the <a href="/guidelines" target="_blank" rel="noopener">Community Guidelines</a>.</p>
+  </div>
+</template>
+
+<template id="tpl-activity">
+  <div class="screen screen--activity">
+    <header class="page-header"><h1 class="page-header__title">Activity</h1></header>
+    <ul class="activity-list" data-role="list"></ul>
+  </div>
+</template>
+
+<template id="tpl-activity-item">
+  <li class="activity-item">
+    <span class="activity-item__icon">
+      <svg class="icon icon--20"><use href="#i-bell"/></svg>
+    </span>
+    <div class="activity-item__body">
+      <p class="activity-item__title"></p>
+      <p class="activity-item__excerpt"></p>
+      <span class="activity-item__time"></span>
+    </div>
+  </li>
+</template>
+
+<template id="tpl-me">
+  <div class="screen screen--me">
+    <header class="page-header"><h1 class="page-header__title">You</h1></header>
+    <section class="me-screen__identity">
+      <span class="avatar avatar--lg" aria-hidden="true" data-role="avatar"></span>
+      <h2 class="me-screen__alias" data-role="alias"></h2>
+      <p class="me-screen__since" data-role="since"></p>
+      <button class="btn btn--ghost btn--sm" data-action="rename" data-role="rename">
+        <svg class="icon icon--18"><use href="#i-refresh"/></svg>
+        Change name
+      </button>
+    </section>
+    <nav class="me-screen__stats">
+      <button class="me-screen__stat" data-action="my-posts">
+        <strong data-role="post-count">0</strong><span>Your posts</span>
+      </button>
+      <button class="me-screen__stat" data-action="my-replies">
+        <strong data-role="comment-count">0</strong><span>Your replies</span>
+      </button>
+    </nav>
+    <ul class="me-screen__list">
+      <li><a class="me-screen__item" href="/faq"><span>FAQ</span><svg class="icon icon--18"><use href="#i-chevron-right"/></svg></a></li>
+      <li><a class="me-screen__item" href="/guidelines"><span>Community Guidelines</span><svg class="icon icon--18"><use href="#i-chevron-right"/></svg></a></li>
+      <li><a class="me-screen__item" href="/privacy"><span>Privacy Policy</span><svg class="icon icon--18"><use href="#i-chevron-right"/></svg></a></li>
+      <li><button class="me-screen__item" data-action="notifications"><span>Notifications</span><span data-role="notif-state">Off</span></button></li>
+      <li><button class="me-screen__item" data-action="logout"><span>Log out</span><svg class="icon icon--18"><use href="#i-logout"/></svg></button></li>
+      <li><button class="me-screen__item me-screen__item--danger" data-action="delete"><span>Delete account</span><svg class="icon icon--18"><use href="#i-trash"/></svg></button></li>
+    </ul>
+    <p class="me-screen__version">v0.1 · Anonymous</p>
+  </div>
+</template>
+
+<template id="tpl-discover">
+  <div class="screen screen--discover">
+    <header class="page-header"><h1 class="page-header__title">Discover</h1></header>
+    <div class="compose__chips" data-role="chips">
+      <button type="button" class="chip chip--active" data-cat="">All</button>
+      <button type="button" class="chip" data-cat="Confession">#Confession</button>
+      <button type="button" class="chip" data-cat="Question">#Question</button>
+      <button type="button" class="chip" data-cat="CampusLife">#CampusLife</button>
+      <button type="button" class="chip" data-cat="Rant">#Rant</button>
+      <button type="button" class="chip" data-cat="Wholesome">#Wholesome</button>
+    </div>
+    <div class="feed-list" data-role="feed"></div>
+  </div>
+</template>
+
+<template id="tpl-faq">
+  <div class="screen screen--page">
+    <header class="page-header">
+      <button class="btn btn--ghost btn--icon" data-action="back" aria-label="Back">
+        <svg class="icon icon--24"><use href="#i-arrow-left"/></svg>
+      </button>
+      <h1 class="page-header__title">FAQ</h1>
+    </header>
+    <div class="page-body">
+      <h2>What is Anonymous?</h2>
+      <p>A private space for your campus to post and reply without names. Nothing you share is tied to your public identity — no real names attached to posts, no photos.</p>
+
+      <h2>Is it really anonymous?</h2>
+      <p>Yes, to everyone on the platform. You pick a display name when you join (like "Quiet Comet"), and that's the only thing other people see. The only place your email exists is in our private admin tools, used only for moderation.</p>
+
+      <h2>How do I join?</h2>
+      <p>You need an invite code from someone already on the platform or from the founding team. This keeps the space small and safe.</p>
+
+      <h2>Can I change my name?</h2>
+      <p>Once per day. Your new name applies to all your posts and replies.</p>
+
+      <h2>Can I delete my post?</h2>
+      <p>Yes. Tap the <strong>⋯</strong> on your own post and choose Delete.</p>
+
+      <h2>Can I delete my account?</h2>
+      <p>Yes. Go to <strong>Me → Delete account</strong>. Your email and profile are removed, and your posts and replies are shown as [deleted]. This cannot be undone.</p>
+
+      <h2>What isn't allowed?</h2>
+      <p>Anything that targets a real person with the intent to harm. See the <a href="/guidelines">Community Guidelines</a> for the full list.</p>
+
+      <h2>How do I report something?</h2>
+      <p>Tap the <strong>⋯</strong> on any post or comment, then choose Report.</p>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-empty">
+  <div class="empty-state">
+    <span class="empty-state__icon"><svg class="icon icon--32"><use href="#i-message"/></svg></span>
+    <h2 class="empty-state__title">It's quiet in here</h2>
+    <p class="empty-state__text">Be the first to say something.</p>
+    <button class="btn btn--primary" data-action="compose" type="button">Post anonymously</button>
+  </div>
+</template>
+
+<template id="tpl-skeleton-card">
+  <div class="skeleton-card" aria-hidden="true">
+    <div class="skeleton-card__header">
+      <span class="skeleton skeleton--avatar"></span>
+      <div class="skeleton-card__meta">
+        <span class="skeleton skeleton--line" style="width:40%"></span>
+        <span class="skeleton skeleton--line" style="width:20%"></span>
+      </div>
+    </div>
+    <span class="skeleton skeleton--line" style="width:95%"></span>
+    <span class="skeleton skeleton--line" style="width:80%"></span>
+    <span class="skeleton skeleton--line" style="width:60%"></span>
+  </div>
+</template>
+
+<template id="tpl-soft-wall">
+  <section class="soft-wall">
+    <h2 class="soft-wall__title">You've seen enough.</h2>
+    <p class="soft-wall__text">Join to keep reading and reply anonymously.</p>
+    <button class="btn btn--primary btn--block" data-action="join" type="button">Join — takes 15 seconds</button>
+  </section>
+</template>
+
+<template id="tpl-signup-sheet">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet__handle"></div>
+    <header class="sheet__header">
+      <h2 class="sheet__title">Join Anonymous</h2>
+      <p class="sheet__subtitle">Say it. Nobody knows.</p>
+    </header>
+    <form class="sheet__body" data-role="form">
+      <div class="field">
+        <label class="field__label" for="su-alias">Your name</label>
+        <input class="field__input" id="su-alias" type="text" autocomplete="off" required minlength="2" maxlength="24" data-role="alias" placeholder="Pick something like Quiet Comet">
+      </div>
+      <div class="field">
+        <label class="field__label" for="su-email">Email</label>
+        <input class="field__input" id="su-email" type="email" autocomplete="email" required data-role="email">
+      </div>
+      <div class="field">
+        <label class="field__label" for="su-password">Password</label>
+        <div class="field__group">
+          <input class="field__input" id="su-password" type="password" autocomplete="new-password" required minlength="8" data-role="password">
+          <button type="button" class="field__toggle" aria-label="Show password" data-action="toggle-password">
+            <svg class="icon icon--18"><use href="#i-eye"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field__label" for="su-invite">Invite code</label>
+        <input class="field__input" id="su-invite" type="text" autocomplete="off" required data-role="invite">
+      </div>
+      <label class="checkbox">
+        <input type="checkbox" data-role="agree">
+        <span>I agree to the <a href="/guidelines" target="_blank" rel="noopener">Community Guidelines</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a></span>
+      </label>
+      <button class="btn btn--primary btn--block" type="submit" disabled data-role="submit">Join the Space</button>
+      <p class="sheet__footnote">Already have one? <a href="#" data-action="switch-login">Log in</a></p>
+    </form>
+  </div>
+</template>
+
+<template id="tpl-login-sheet">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet__handle"></div>
+    <header class="sheet__header">
+      <h2 class="sheet__title">Welcome back</h2>
+      <p class="sheet__subtitle">Say it. Nobody knows.</p>
+    </header>
+    <form class="sheet__body" data-role="form">
+      <div class="field">
+        <label class="field__label" for="li-email">Email</label>
+        <input class="field__input" id="li-email" type="email" autocomplete="email" required data-role="email">
+      </div>
+      <div class="field">
+        <label class="field__label" for="li-password">Password</label>
+        <div class="field__group">
+          <input class="field__input" id="li-password" type="password" autocomplete="current-password" required data-role="password">
+          <button type="button" class="field__toggle" aria-label="Show password" data-action="toggle-password">
+            <svg class="icon icon--18"><use href="#i-eye"/></svg>
+          </button>
+        </div>
+      </div>
+      <button class="btn btn--primary btn--block" type="submit" data-role="submit">Log in</button>
+      <p class="sheet__footnote">New here? <a href="#" data-action="switch-signup">Join the Space</a></p>
+    </form>
+  </div>
+</template>
+
+<template id="tpl-more-sheet">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet__handle"></div>
+    <div class="sheet__body sheet__body--menu">
+      <button class="sheet__menu-item" data-action="report">
+        <svg class="icon icon--20"><use href="#i-flag"/></svg>
+        <span>Report</span>
+      </button>
+      <button class="sheet__menu-item" data-action="share">
+        <svg class="icon icon--20"><use href="#i-share"/></svg>
+        <span>Share</span>
+      </button>
+      <button class="sheet__menu-item sheet__menu-item--danger" data-action="delete" hidden>
+        <svg class="icon icon--20"><use href="#i-trash"/></svg>
+        <span>Delete</span>
+      </button>
+      <button class="sheet__menu-item" data-action="cancel">
+        <svg class="icon icon--20"><use href="#i-x"/></svg>
+        <span>Cancel</span>
+      </button>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-report-sheet">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet__handle"></div>
+    <header class="sheet__header">
+      <h2 class="sheet__title">Report</h2>
+      <p class="sheet__subtitle">What's wrong with this?</p>
+    </header>
+    <div class="sheet__body sheet__body--menu">
+      <button class="sheet__menu-item" data-reason="harassment"><span>Harassment</span></button>
+      <button class="sheet__menu-item" data-reason="doxxing"><span>Sharing personal info</span></button>
+      <button class="sheet__menu-item" data-reason="threat"><span>Threat or violence</span></button>
+      <button class="sheet__menu-item" data-reason="spam"><span>Spam</span></button>
+      <button class="sheet__menu-item" data-reason="other"><span>Something else</span></button>
+      <button class="sheet__menu-item" data-action="cancel"><span>Cancel</span></button>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-rename-sheet">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet__handle"></div>
+    <header class="sheet__header">
+      <h2 class="sheet__title">Change your name</h2>
+      <p class="sheet__subtitle">Once per day. Your old posts get renamed too.</p>
+    </header>
+    <form class="sheet__body" data-role="form">
+      <div class="field">
+        <label class="field__label" for="rn-alias">New name</label>
+        <input class="field__input" id="rn-alias" type="text" required minlength="2" maxlength="24" autocomplete="off" data-role="alias">
+      </div>
+      <button class="btn btn--primary btn--block" type="submit" data-role="submit">Save</button>
+    </form>
+  </div>
+</template>
+
+<div id="sheet-root"></div>
+<div id="toast-root"></div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

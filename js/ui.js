@@ -93,3 +93,29 @@ export async function sharePost(post) {
   try { await navigator.clipboard.writeText(url); toast('Link copied.'); }
   catch { toast('Share failed.'); }
 }
+
+export function haptic(ms = 8) {
+  try { navigator.vibrate?.(ms); } catch {}
+}
+
+export function shareToWhatsApp(post) {
+  const url = `${location.origin}/p/${post.id}`;
+  const text = `${post.content}\n\n${url}`;
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  haptic(10);
+}
+
+export function formatReach(n) {
+  if (n == null) return '0';
+  if (n < 1000) return String(n);
+  if (n < 10000) return (n / 1000).toFixed(1).replace('.0', '') + 'k';
+  return Math.floor(n / 1000) + 'k';
+}
+
+// FIXED: never returns an empty string — every branch returns a valid class.
+// Previously returned '' for 10-499, which crashed classList.add('').
+export function reachClass(n) {
+  if (n == null || n < 10) return 'post-card__reach--quiet';
+  if (n < 500) return 'post-card__reach--warm';
+  return 'post-card__reach--hot';
+}

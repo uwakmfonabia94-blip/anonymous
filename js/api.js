@@ -3,6 +3,8 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY, detectUniversity } from './config.js';
 const SESSION_KEY = 'anon.session';
 export const universitySlug = detectUniversity();
 
+// ---------- SESSION ----------
+
 export function getSession() {
   try { const r = localStorage.getItem(SESSION_KEY); return r ? JSON.parse(r) : null; }
   catch { return null; }
@@ -128,6 +130,19 @@ export async function universityId() {
 export const checkInviteCode     = (code)  => rpc('check_invite_code',     { p_code: code });
 export const checkAliasAvailable = (alias) => rpc('check_alias_available', { p_alias: alias });
 
+// ---------- VIEWER KEY (dedup for reach) ----------
+
+export function getViewerKey() {
+  if (isAuthed()) return getSession().user_id;
+  let k = localStorage.getItem('anon.viewer_key');
+  if (!k) {
+    k = (crypto.randomUUID && crypto.randomUUID()) ||
+        (Date.now().toString(36) + Math.random().toString(36).slice(2));
+    localStorage.setItem('anon.viewer_key', k);
+  }
+  return k;
+}
+
 // ---------- FEED ----------
 
 export const listFeed = async ({ limit = 20, before = null, category = null } = {}) =>
@@ -138,47 +153,70 @@ export const listFeed = async ({ limit = 20, before = null, category = null } = 
     p_category: category,
   });
 
+export async function getHotPost() {
+  try {
+    const rows = await rpc('get_hot_post', { p_university_id: await universityId() });
+    return rows?.[0] || null;
+  } catch { return null; }
+}
+
+export async function countNewPostsSince(since) {
+  try {
+    return await rpc('count_new_posts_since', {
+      p_university_id: await universityId(),
+      p_since: since,
+    });
+  } catch { return 0; }
+}
+
+export async function myRecapSince(since) {
+  try {
+    const rows = await authRpc('my_recap_since', { p_since: since });
+    return rows?.[0] || { new_replies: 0, new_upvotes: 0, new_posts: 0 };
+  } catch { return { new_replies: 0, new_upvotes: 0, new_posts: 0 }; }
+}
+
+// ---------- VIEWS ----------
+
+export async function recordView(postId) {
+  try {
+    return await publicFetch('/rest/v1/rpc/record_view', {
+      method: 'POST',
+      body: JSON.stringify({ p_post_id: postId, p_viewer_key: getViewerKey() }),
+    });
+  } catch { return 0; }
+}
+
 // ---------- SINGLE POST ----------
-// Tries RPC first; falls back to plain REST if the RPC is missing or fails.
 
 export async function getPostFull(id) {
-  // Path A: RPC
   try {
     const rows = await rpc('get_post_full', { p_id: id });
     if (rows?.[0]) return rows[0];
   } catch (err) {
     console.warn('[getPostFull] RPC failed, falling back to REST:', err.message || err);
   }
-
-  // Path B: REST fallback — works as long as posts has public SELECT (it does)
   try {
     const rows = await publicFetch(
-      `/rest/v1/posts?id=eq.${id}&select=id,content,category,shareable,created_at,author_id,author:profiles!author_id(alias)`
+      `/rest/v1/posts?id=eq.${id}&select=id,content,category,shareable,created_at,view_count,author_id,author:profiles!author_id(alias)`
     );
     const p = rows?.[0];
     if (!p) return null;
-
-    // Best-effort counts (public read allowed on both tables)
     let upvote_count = 0, comment_count = 0;
     try {
-      const votes = await publicFetch(`/rest/v1/upvotes?post_id=eq.${id}&select=user_id`);
-      upvote_count = votes?.length || 0;
+      const v = await publicFetch(`/rest/v1/upvotes?post_id=eq.${id}&select=user_id`);
+      upvote_count = v?.length || 0;
     } catch {}
     try {
-      const cmts = await publicFetch(`/rest/v1/comments?post_id=eq.${id}&select=id`);
-      comment_count = cmts?.length || 0;
+      const c = await publicFetch(`/rest/v1/comments?post_id=eq.${id}&select=id`);
+      comment_count = c?.length || 0;
     } catch {}
-
     return {
-      id: p.id,
-      content: p.content,
-      category: p.category,
-      shareable: p.shareable,
-      created_at: p.created_at,
-      author_id: p.author_id,
+      id: p.id, content: p.content, category: p.category, shareable: p.shareable,
+      created_at: p.created_at, author_id: p.author_id,
       author_alias: p.author?.alias || 'Unknown',
-      upvote_count,
-      comment_count,
+      upvote_count, comment_count, view_count: p.view_count || 0,
+      type: p.type || 'text', poll_data: null,
     };
   } catch (err) {
     console.error('[getPostFull] REST fallback also failed:', err);
@@ -198,18 +236,11 @@ export async function listComments(postId) {
         `/rest/v1/comments?post_id=eq.${postId}&select=id,post_id,parent_id,content,created_at,author_id,author:profiles!author_id(alias)&order=created_at.asc`
       );
       return (rows || []).map(c => ({
-        id: c.id,
-        post_id: c.post_id,
-        parent_id: c.parent_id,
-        content: c.content,
-        created_at: c.created_at,
-        author_id: c.author_id,
-        author_alias: c.author?.alias || 'Unknown',
+        id: c.id, post_id: c.post_id, parent_id: c.parent_id,
+        content: c.content, created_at: c.created_at,
+        author_id: c.author_id, author_alias: c.author?.alias || 'Unknown',
       }));
-    } catch (err2) {
-      console.error('[listComments] REST fallback also failed:', err2);
-      return [];
-    }
+    } catch { return []; }
   }
 }
 
@@ -217,26 +248,21 @@ export async function createComment({ postId, parentId = null, content }) {
   const rows = await authFetch(`/rest/v1/comments`, {
     method: 'POST', headers: { Prefer: 'return=representation' },
     body: JSON.stringify([{
-      post_id: postId,
-      parent_id: parentId,
-      author_id: getSession().user_id,
-      content,
+      post_id: postId, parent_id: parentId,
+      author_id: getSession().user_id, content,
     }]),
   });
   return rows?.[0];
 }
 
 // ---------- POSTS ----------
-// university_id is filled by a DB trigger — client doesn't send it.
 
 export async function createPost({ content, category = 'General', shareable = true }) {
   const rows = await authFetch(`/rest/v1/posts`, {
     method: 'POST', headers: { Prefer: 'return=representation' },
     body: JSON.stringify([{
       author_id: getSession().user_id,
-      content,
-      category,
-      shareable,
+      content, category, shareable,
     }]),
   });
   return rows?.[0];
@@ -246,7 +272,30 @@ export async function deletePost(postId) {
   await authFetch(`/rest/v1/posts?id=eq.${postId}`, { method: 'DELETE' });
 }
 
-// ---------- VOTES ----------
+// ---------- POLLS ----------
+
+export async function createPoll({ question, options, category = 'General' }) {
+  return await authRpc('create_poll', {
+    p_question: question,
+    p_options: options,
+    p_category: category,
+  });
+}
+
+export async function votePoll(postId, optionId) {
+  return await authRpc('vote_poll', { p_post_id: postId, p_option_id: optionId });
+}
+
+export async function getPollResults(postId) {
+  try {
+    return await publicFetch('/rest/v1/rpc/get_poll_results', {
+      method: 'POST',
+      body: JSON.stringify({ p_post_id: postId }),
+    });
+  } catch { return null; }
+}
+
+// ---------- VOTES (likes) ----------
 
 export async function toggleVote(postId, currentlyVoted) {
   const uid = getSession().user_id;
@@ -284,6 +333,8 @@ export async function getMyVotes(postIds) {
 
 export const listActivity = () =>
   authFetch(`/rest/v1/activity?select=*&order=created_at.desc&limit=50`);
+
+export const activityFeed = () => authRpc('activity_feed', {});
 
 export async function markActivitySeen() {
   const uid = getSession().user_id;
@@ -347,6 +398,36 @@ export async function countMyComments() {
   const uid = getSession().user_id;
   const rows = await authFetch(`/rest/v1/comments?author_id=eq.${uid}&select=id`);
   return rows?.length || 0;
+}
+
+// ---------- ME DASHBOARD ----------
+
+export async function myStatsThisWeek() {
+  try {
+    const rows = await authRpc('my_stats_this_week', {});
+    return rows?.[0] || null;
+  } catch { return null; }
+}
+
+export async function myBestPost() {
+  try {
+    const rows = await authRpc('my_best_post', {});
+    return rows?.[0] || null;
+  } catch { return null; }
+}
+
+export async function campusGoalProgress() {
+  try {
+    const rows = await authRpc('campus_goal_progress', {});
+    return rows?.[0] || null;
+  } catch { return null; }
+}
+
+export async function myMilestones() {
+  try {
+    const result = await authRpc('my_milestones', {});
+    return Array.isArray(result) ? result : [];
+  } catch { return []; }
 }
 
 // ---------- PUSH ----------

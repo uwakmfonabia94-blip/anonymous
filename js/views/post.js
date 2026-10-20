@@ -1,6 +1,7 @@
 import * as api from '../api.js';
 import { timeAgo, renderAvatar, el, toast, sharePost, shareToWhatsApp, haptic,
          formatReach, reachClass, openSheet, closeSheet } from '../ui.js';
+import { buildMediaUrl, buildViewerWatermark } from '../media.js';
 
 export async function mount(root, params) {
   root.innerHTML = '';
@@ -15,6 +16,10 @@ export async function mount(root, params) {
 
   screen.querySelector('[data-action="back"]').addEventListener('click', () => history.back());
   postBox.innerHTML = '<p class="empty-state__text" style="padding:24px 0;">Loading…</p>';
+
+  let viewerAlias = api.getCachedAlias();
+  if (!viewerAlias && api.isAuthed()) viewerAlias = await api.ensureAliasCached().catch(() => null);
+  const watermark = buildViewerWatermark(viewerAlias);
 
   let post;
   try { post = await api.getPostFull(params.id); }
@@ -31,10 +36,9 @@ export async function mount(root, params) {
     return () => {};
   }
 
-  const built = buildPostCard(post);
+  const built = buildPostCard(post, watermark);
   postBox.appendChild(built.card);
 
-  // Record view and update UI immediately with the returned count
   api.recordView(post.id).then(newCount => {
     if (typeof newCount === 'number' && newCount > 0) {
       const stats = built.card.querySelector('.post-card__stats');
@@ -175,25 +179,73 @@ function startPostPolling(card, postId) {
       const voteCount = card.querySelector('[data-action="vote"] .post-card__count');
       if (voteCount) {
         const cur = Number(voteCount.textContent || 0);
-        if (c.upvote !== cur) {
-          voteCount.textContent = c.upvote;
-          if (c.upvote > cur) bumpEl(voteCount, 'count-bump');
-        }
+        if (c.upvote !== cur) { voteCount.textContent = c.upvote; if (c.upvote > cur) bumpEl(voteCount, 'count-bump'); }
       }
 
       const commentCount = card.querySelector('[data-action="open"] .post-card__count');
       if (commentCount) {
         const cur = Number(commentCount.textContent || 0);
-        if (c.comment > cur) {
-          commentCount.textContent = c.comment;
-          bumpEl(commentCount, 'count-bump');
-        }
+        if (c.comment > cur) { commentCount.textContent = c.comment; bumpEl(commentCount, 'count-bump'); }
       }
     } catch {}
   }, 15000);
 }
 
-function buildPostCard(post) {
+function renderMediaGrid(container, media, watermark) {
+  if (!container || !media || !media.length) { if (container) container.remove(); return; }
+  container.innerHTML = '';
+  container.classList.add('post-media');
+  container.classList.add(media.length === 1 ? 'post-media--single' : 'post-media--double');
+
+  const itemTpl = document.getElementById('tpl-post-media-item');
+  media.slice(0, 2).forEach((m, i) => {
+    const node = itemTpl.content.firstElementChild.cloneNode(true);
+    const img = node.querySelector('.post-media__img');
+    img.src = buildMediaUrl(m.path);
+    img.alt = `Photo ${i + 1}`;
+    node.querySelector('.post-media__watermark').textContent = watermark;
+    node.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(media, i, watermark); });
+    container.appendChild(node);
+  });
+}
+
+function openLightbox(media, startIndex, watermark) {
+  const existing = document.getElementById('photo-lightbox-root');
+  if (existing) existing.remove();
+
+  const tpl = document.getElementById('tpl-photo-lightbox');
+  const box = tpl.content.firstElementChild.cloneNode(true);
+  box.id = 'photo-lightbox-root';
+
+  const imgEl   = box.querySelector('.photo-lightbox__img');
+  const wmEl    = box.querySelector('.photo-lightbox__watermark');
+  const prevBtn = box.querySelector('[data-action="prev"]');
+  const nextBtn = box.querySelector('[data-action="next"]');
+  const closeBtn = box.querySelector('[data-action="close"]');
+
+  let idx = startIndex || 0;
+
+  function show() {
+    imgEl.src = buildMediaUrl(media[idx].path);
+    wmEl.textContent = watermark;
+    prevBtn.style.display = idx > 0 ? '' : 'none';
+    nextBtn.style.display = idx < media.length - 1 ? '' : 'none';
+  }
+
+  prevBtn.addEventListener('click', (e) => { e.stopPropagation(); if (idx > 0) { idx--; show(); } });
+  nextBtn.addEventListener('click', (e) => { e.stopPropagation(); if (idx < media.length - 1) { idx++; show(); } });
+  closeBtn.addEventListener('click', (e) => { e.stopPropagation(); box.remove(); });
+  box.addEventListener('click', (e) => { if (e.target === box) box.remove(); });
+
+  document.addEventListener('keydown', function esc(e) {
+    if (e.key === 'Escape') { box.remove(); document.removeEventListener('keydown', esc); }
+  });
+
+  document.body.appendChild(box);
+  show();
+}
+
+function buildPostCard(post, watermark) {
   const isPoll = post.type === 'poll';
   const tplId = isPoll ? 'tpl-poll-card' : 'tpl-post-card';
   const node = document.getElementById(tplId).content.firstElementChild.cloneNode(true);
@@ -208,7 +260,17 @@ function buildPostCard(post) {
     cat.hidden = false;
     cat.textContent = `#${post.category}`;
   }
-  node.querySelector('.post-card__body').textContent = post.content;
+
+  const bodyEl = node.querySelector('.post-card__body');
+  if (post.content) bodyEl.textContent = post.content;
+  else bodyEl.remove();
+
+  const mediaWrap = node.querySelector('[data-role="media"]');
+  if (post.media && post.media.length && mediaWrap) {
+    renderMediaGrid(mediaWrap, post.media, watermark);
+  } else if (mediaWrap) {
+    mediaWrap.remove();
+  }
 
   const teaser = node.querySelector('.post-card__teaser');
   if (teaser) teaser.remove();
@@ -216,9 +278,7 @@ function buildPostCard(post) {
   const stats = node.querySelector('.post-card__stats');
   updateReachDisplay(stats, post.view_count || 0);
 
-  if (isPoll) {
-    renderPoll(node.querySelector('[data-role="poll"]'), post.poll_data, post, node);
-  }
+  if (isPoll) renderPoll(node.querySelector('[data-role="poll"]'), post.poll_data, post, node);
 
   const voteBtn = node.querySelector('[data-action="vote"]');
   const commentBtn = node.querySelector('[data-action="open"]');
@@ -231,10 +291,7 @@ function buildPostCard(post) {
 
   let voted = false;
   if (api.isAuthed()) {
-    api.getMyVotes([post.id]).then(v => {
-      voted = v.length > 0;
-      if (voted) voteBtn.classList.add('is-liked');
-    }).catch(() => {});
+    api.getMyVotes([post.id]).then(v => { voted = v.length > 0; if (voted) voteBtn.classList.add('is-liked'); }).catch(() => {});
   }
 
   let voting = false;
@@ -291,17 +348,9 @@ function buildPostCard(post) {
 function renderPoll(box, data, post, card) {
   if (!box) return;
   box.innerHTML = '';
-
-  if (!data) {
-    box.appendChild(el('div', { class: 'poll--fallback' }, 'Loading poll options…'));
-    return;
-  }
-
+  if (!data) { box.appendChild(el('div', { class: 'poll--fallback' }, 'Loading poll options…')); return; }
   const options = data.options || [];
-  if (!options.length) {
-    box.appendChild(el('div', { class: 'poll--empty' }, 'No options yet'));
-    return;
-  }
+  if (!options.length) { box.appendChild(el('div', { class: 'poll--empty' }, 'No options yet')); return; }
 
   const total = data.total_votes || 0;
   const mine = data.my_option_id;

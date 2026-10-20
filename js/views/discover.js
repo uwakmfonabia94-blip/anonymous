@@ -1,18 +1,17 @@
 import * as api from '../api.js';
 import { timeAgo, renderAvatar, el, toast, sharePost, shareToWhatsApp, haptic,
          formatReach, reachClass } from '../ui.js';
+import { buildMediaUrl, buildViewerWatermark } from '../media.js';
 import { navigate } from '../router.js';
 
 const VIEWED_KEY = 'anon.viewedPosts';
-
 function getViewedSet() {
   try { return new Set(JSON.parse(sessionStorage.getItem(VIEWED_KEY) || '[]')); }
   catch { return new Set(); }
 }
-function markViewed(postId) {
-  const set = getViewedSet();
-  set.add(postId);
-  sessionStorage.setItem(VIEWED_KEY, JSON.stringify([...set]));
+function markViewed(id) {
+  const s = getViewedSet(); s.add(id);
+  sessionStorage.setItem(VIEWED_KEY, JSON.stringify([...s]));
 }
 
 export async function mount(root) {
@@ -24,15 +23,17 @@ export async function mount(root) {
   const feed  = screen.querySelector('[data-role="feed"]');
   let category = null;
 
+  let viewerAlias = api.getCachedAlias();
+  if (!viewerAlias && api.isAuthed()) viewerAlias = await api.ensureAliasCached().catch(() => null);
+  const watermark = buildViewerWatermark(viewerAlias);
+
   const viewObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       if (!entry.isIntersecting) return;
       const card = entry.target;
       const postId = card.dataset.postId;
       if (!postId) return;
-      const viewedSet = getViewedSet();
-      if (viewedSet.has(postId)) return;
-
+      if (getViewedSet().has(postId)) return;
       setTimeout(async () => {
         if (!card.isConnected) return;
         if (getViewedSet().has(postId)) return;
@@ -40,12 +41,10 @@ export async function mount(root) {
         try {
           const newCount = await api.recordView(postId);
           if (typeof newCount === 'number' && newCount > 0) {
-            const stats = card.querySelector('.post-card__stats');
-            updateReachDisplay(stats, newCount, { animate: true });
+            updateReachDisplay(card.querySelector('.post-card__stats'), newCount, { animate: true });
           }
         } catch {}
       }, 1000);
-
       viewObserver.unobserve(card);
     });
   }, { threshold: 0.5 });
@@ -58,10 +57,7 @@ export async function mount(root) {
     try {
       const posts = await api.listFeed({ limit: 30, category });
       feed.innerHTML = '';
-      if (!posts.length) {
-        feed.appendChild(el('p', { class: 'empty-state__text' }, 'Nothing here yet.'));
-        return;
-      }
+      if (!posts.length) { feed.appendChild(el('p', { class: 'empty-state__text' }, 'Nothing here yet.')); return; }
 
       let myVotes = new Set();
       if (api.isAuthed()) {
@@ -73,7 +69,7 @@ export async function mount(root) {
       const myUid = api.isAuthed() ? api.getSession()?.user_id : null;
 
       for (const post of posts) {
-        const card = renderCard(post, { myVotes, myUid });
+        const card = renderCard(post, { myVotes, myUid, watermark });
         feed.appendChild(card);
         viewObserver.observe(card);
       }
@@ -108,10 +104,7 @@ function updateReachDisplay(stats, reach, { animate = false } = {}) {
   const icon = stats.querySelector('.post-card__reach-icon use');
   if (icon) icon.setAttribute('href', reach >= 500 ? '#i-flame' : '#i-eye');
   const reachEl = stats.querySelector('.post-card__reach');
-  if (reachEl) {
-    reachEl.textContent = formatReach(reach);
-    if (animate && !wasZero) bumpEl(reachEl, 'post-card__reach--bump');
-  }
+  if (reachEl) { reachEl.textContent = formatReach(reach); if (animate && !wasZero) bumpEl(reachEl, 'post-card__reach--bump'); }
   stats.dataset.reach = String(reach);
 }
 
@@ -126,7 +119,6 @@ function startReachPolling(feed) {
   return setInterval(async () => {
     if (document.hidden) return;
     const cards = Array.from(feed.querySelectorAll('.post-card')).slice(0, 60);
-    if (!cards.length) return;
     const ids = cards.map(c => c.dataset.postId).filter(Boolean);
     if (!ids.length) return;
     try {
@@ -134,36 +126,60 @@ function startReachPolling(feed) {
       for (const card of cards) {
         const c = counts[card.dataset.postId];
         if (!c) continue;
-
         const stats = card.querySelector('.post-card__stats');
-        if (stats) {
-          const current = Number(stats.dataset.reach || 0);
-          if (c.view > current) updateReachDisplay(stats, c.view, { animate: true });
-        }
-
+        if (stats) { const cur = Number(stats.dataset.reach || 0); if (c.view > cur) updateReachDisplay(stats, c.view, { animate: true }); }
         const voteCount = card.querySelector('[data-action="vote"] .post-card__count');
-        if (voteCount) {
-          const cur = Number(voteCount.textContent || 0);
-          if (c.upvote > cur) {
-            voteCount.textContent = c.upvote;
-            bumpEl(voteCount, 'count-bump');
-          }
-        }
-
+        if (voteCount) { const cur = Number(voteCount.textContent || 0); if (c.upvote > cur) { voteCount.textContent = c.upvote; bumpEl(voteCount, 'count-bump'); } }
         const commentCount = card.querySelector('[data-action="open"] .post-card__count');
-        if (commentCount) {
-          const cur = Number(commentCount.textContent || 0);
-          if (c.comment > cur) {
-            commentCount.textContent = c.comment;
-            bumpEl(commentCount, 'count-bump');
-          }
-        }
+        if (commentCount) { const cur = Number(commentCount.textContent || 0); if (c.comment > cur) { commentCount.textContent = c.comment; bumpEl(commentCount, 'count-bump'); } }
       }
     } catch {}
   }, 30000);
 }
 
-function renderCard(post, { myVotes, myUid }) {
+function renderMediaGrid(container, media, watermark) {
+  if (!container || !media || !media.length) { if (container) container.remove(); return; }
+  container.innerHTML = '';
+  container.classList.add('post-media');
+  container.classList.add(media.length === 1 ? 'post-media--single' : 'post-media--double');
+  const itemTpl = document.getElementById('tpl-post-media-item');
+  media.slice(0, 2).forEach((m, i) => {
+    const node = itemTpl.content.firstElementChild.cloneNode(true);
+    const img = node.querySelector('.post-media__img');
+    img.src = buildMediaUrl(m.path); img.alt = `Photo ${i + 1}`;
+    node.querySelector('.post-media__watermark').textContent = watermark;
+    node.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(media, i, watermark); });
+    container.appendChild(node);
+  });
+}
+
+function openLightbox(media, startIndex, watermark) {
+  const existing = document.getElementById('photo-lightbox-root');
+  if (existing) existing.remove();
+  const tpl = document.getElementById('tpl-photo-lightbox');
+  const box = tpl.content.firstElementChild.cloneNode(true);
+  box.id = 'photo-lightbox-root';
+  const imgEl   = box.querySelector('.photo-lightbox__img');
+  const wmEl    = box.querySelector('.photo-lightbox__watermark');
+  const prevBtn = box.querySelector('[data-action="prev"]');
+  const nextBtn = box.querySelector('[data-action="next"]');
+  const closeBtn = box.querySelector('[data-action="close"]');
+  let idx = startIndex || 0;
+  function show() {
+    imgEl.src = buildMediaUrl(media[idx].path);
+    wmEl.textContent = watermark;
+    prevBtn.style.display = idx > 0 ? '' : 'none';
+    nextBtn.style.display = idx < media.length - 1 ? '' : 'none';
+  }
+  prevBtn.addEventListener('click', (e) => { e.stopPropagation(); if (idx > 0) { idx--; show(); } });
+  nextBtn.addEventListener('click', (e) => { e.stopPropagation(); if (idx < media.length - 1) { idx++; show(); } });
+  closeBtn.addEventListener('click', (e) => { e.stopPropagation(); box.remove(); });
+  box.addEventListener('click', (e) => { if (e.target === box) box.remove(); });
+  document.body.appendChild(box);
+  show();
+}
+
+function renderCard(post, { myVotes, myUid, watermark }) {
   const isPoll = post.type === 'poll';
   const tplId = isPoll ? 'tpl-poll-card' : 'tpl-post-card';
   const card = document.getElementById(tplId).content.firstElementChild.cloneNode(true);
@@ -178,23 +194,29 @@ function renderCard(post, { myVotes, myUid }) {
     cat.hidden = false;
     cat.textContent = `#${post.category}`;
   }
-  card.querySelector('.post-card__body').textContent = post.content;
+
+  const bodyEl = card.querySelector('.post-card__body');
+  if (post.content) bodyEl.textContent = post.content;
+  else bodyEl.remove();
+
+  const mediaWrap = card.querySelector('[data-role="media"]');
+  if (post.media && post.media.length && mediaWrap) {
+    renderMediaGrid(mediaWrap, post.media, watermark);
+  } else if (mediaWrap) {
+    mediaWrap.remove();
+  }
 
   const teaser = card.querySelector('.post-card__teaser');
   if (teaser && post.top_comment_text) {
     teaser.hidden = false;
-    teaser.querySelector('.post-card__teaser__author').textContent =
-      post.top_comment_alias ? `${post.top_comment_alias}:` : '';
-    teaser.querySelector('.post-card__teaser__text').textContent =
-      post.top_comment_text.length > 120 ? post.top_comment_text.slice(0, 117) + '…' : post.top_comment_text;
+    teaser.querySelector('.post-card__teaser__author').textContent = post.top_comment_alias ? `${post.top_comment_alias}:` : '';
+    teaser.querySelector('.post-card__teaser__text').textContent = post.top_comment_text.length > 120 ? post.top_comment_text.slice(0, 117) + '…' : post.top_comment_text;
   }
 
   const stats = card.querySelector('.post-card__stats');
   updateReachDisplay(stats, post.view_count || 0);
 
-  if (isPoll) {
-    renderPoll(card.querySelector('[data-role="poll"]'), post.poll_data, post);
-  }
+  if (isPoll) renderPoll(card.querySelector('[data-role="poll"]'), post.poll_data, post);
 
   const [voteBtn, commentBtn, shareBtn, waBtn] = card.querySelectorAll('.post-card__action');
   voteBtn.querySelector('.post-card__count').textContent = post.upvote_count ?? 0;
@@ -206,8 +228,7 @@ function renderCard(post, { myVotes, myUid }) {
     e.stopPropagation();
     if (voting) return;
     if (!api.isAuthed()) return window.__anon.openSignup();
-    voting = true;
-    haptic(6);
+    voting = true; haptic(6);
     const wasVoted = myVotes.has(post.id);
     voteBtn.classList.toggle('is-liked');
     const c = voteBtn.querySelector('.post-card__count');
@@ -215,10 +236,7 @@ function renderCard(post, { myVotes, myUid }) {
     try {
       await api.toggleVote(post.id, wasVoted);
       if (wasVoted) myVotes.delete(post.id); else myVotes.add(post.id);
-      if (!getViewedSet().has(post.id)) {
-        markViewed(post.id);
-        api.recordView(post.id).catch(() => {});
-      }
+      if (!getViewedSet().has(post.id)) { markViewed(post.id); api.recordView(post.id).catch(() => {}); }
     } catch {
       voteBtn.classList.toggle('is-liked');
       c.textContent = Number(c.textContent) + (wasVoted ? 1 : -1);
@@ -228,7 +246,7 @@ function renderCard(post, { myVotes, myUid }) {
 
   const go = () => navigate(`/p/${post.id}`);
   commentBtn.addEventListener('click', go);
-  card.querySelector('.post-card__body').addEventListener('click', go);
+  if (bodyEl) bodyEl.addEventListener('click', go);
   shareBtn.addEventListener('click', (e) => { e.stopPropagation(); sharePost(post); });
   if (waBtn) waBtn.addEventListener('click', (e) => { e.stopPropagation(); shareToWhatsApp(post); });
 
@@ -238,18 +256,9 @@ function renderCard(post, { myVotes, myUid }) {
 function renderPoll(box, data, post) {
   if (!box) return;
   box.innerHTML = '';
-
-  if (!data) {
-    box.appendChild(el('div', { class: 'poll--fallback' }, 'Tap to view poll'));
-    return;
-  }
-
+  if (!data) { box.appendChild(el('div', { class: 'poll--fallback' }, 'Tap to view poll')); return; }
   const options = data.options || [];
-  if (!options.length) {
-    box.appendChild(el('div', { class: 'poll--empty' }, 'No options yet'));
-    return;
-  }
-
+  if (!options.length) { box.appendChild(el('div', { class: 'poll--empty' }, 'No options yet')); return; }
   const total = data.total_votes || 0;
   const mine = data.my_option_id;
   const closed = data.closed;

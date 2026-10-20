@@ -1,6 +1,7 @@
 import * as api from '../api.js';
 import { timeAgo, renderAvatar, el, toast, sharePost, shareToWhatsApp, haptic,
          formatReach, reachClass, openSheet, closeSheet } from '../ui.js';
+import { buildMediaUrl, buildViewerWatermark } from '../media.js';
 
 const SPICE_PROMPTS = [
   { badge: 'Question of the day', text: "What's the worst advice you've ever gotten?" },
@@ -33,6 +34,10 @@ export async function mount(root) {
 
   const justPostedId = sessionStorage.getItem('anon.justPosted');
   sessionStorage.removeItem('anon.justPosted');
+
+  let viewerAlias = api.getCachedAlias();
+  if (!viewerAlias && api.isAuthed()) viewerAlias = await api.ensureAliasCached().catch(() => null);
+  const watermark = buildViewerWatermark(viewerAlias);
 
   const skeletonTpl = document.getElementById('tpl-skeleton-card');
   for (let i = 0; i < 3; i++) feed.appendChild(skeletonTpl.content.firstElementChild.cloneNode(true));
@@ -71,7 +76,6 @@ export async function mount(root) {
   }
   const myUid = api.isAuthed() ? api.getSession()?.user_id : null;
 
-  // --- View tracking observer ---
   const viewedSet = getViewedSet();
   const viewObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
@@ -80,7 +84,7 @@ export async function mount(root) {
       const postId = card.dataset.postId;
       if (!postId || viewedSet.has(postId)) return;
 
-      const timer = setTimeout(async () => {
+      setTimeout(async () => {
         if (!card.isConnected) return;
         if (viewedSet.has(postId)) return;
         viewedSet.add(postId);
@@ -94,17 +98,14 @@ export async function mount(root) {
         } catch {}
       }, 1000);
 
-      card._viewTimer = timer;
       viewObserver.unobserve(card);
     });
   }, { threshold: 0.5 });
 
-  const observeCard = (card) => {
-    viewObserver.observe(card);
-  };
+  const observeCard = (card) => viewObserver.observe(card);
 
   if (hotPost && hotPost.id) {
-    const hotCard = renderPostCard(hotPost, { isHot: true, myVotes, myUid });
+    const hotCard = renderPostCard(hotPost, { isHot: true, myVotes, myUid, watermark });
     feed.appendChild(hotCard);
     observeCard(hotCard);
   }
@@ -125,7 +126,7 @@ export async function mount(root) {
   const appendPosts = (list) => {
     for (const post of list) {
       renderSection(sectionFor(post.created_at));
-      const card = renderPostCard(post, { myVotes, myUid });
+      const card = renderPostCard(post, { myVotes, myUid, watermark });
       feed.appendChild(card);
       observeCard(card);
       renderedCount++;
@@ -247,27 +248,80 @@ function startReachPolling(feed) {
 
         const voteBtn = card.querySelector('[data-action="vote"] .post-card__count');
         if (voteBtn) {
-          const current = Number(voteBtn.textContent || 0);
-          if (c.upvote > current) {
-            voteBtn.textContent = c.upvote;
-            bumpEl(voteBtn, 'count-bump');
-          }
+          const cur = Number(voteBtn.textContent || 0);
+          if (c.upvote > cur) { voteBtn.textContent = c.upvote; bumpEl(voteBtn, 'count-bump'); }
         }
 
         const commentBtn = card.querySelector('[data-action="open"] .post-card__count');
         if (commentBtn) {
-          const current = Number(commentBtn.textContent || 0);
-          if (c.comment > current) {
-            commentBtn.textContent = c.comment;
-            bumpEl(commentBtn, 'count-bump');
-          }
+          const cur = Number(commentBtn.textContent || 0);
+          if (c.comment > cur) { commentBtn.textContent = c.comment; bumpEl(commentBtn, 'count-bump'); }
         }
       }
     } catch {}
   }, 30000);
 }
 
-function renderPostCard(post, { isHot = false, myVotes, myUid }) {
+function renderMediaGrid(container, media, watermark, onOpen) {
+  if (!container || !media || !media.length) { if (container) container.remove(); return; }
+  container.innerHTML = '';
+  container.classList.add('post-media');
+  container.classList.add(media.length === 1 ? 'post-media--single' : 'post-media--double');
+
+  const itemTpl = document.getElementById('tpl-post-media-item');
+  media.slice(0, 2).forEach((m, i) => {
+    const node = itemTpl.content.firstElementChild.cloneNode(true);
+    const img = node.querySelector('.post-media__img');
+    img.src = buildMediaUrl(m.path);
+    img.loading = 'lazy';
+    img.alt = `Photo ${i + 1}`;
+    node.querySelector('.post-media__watermark').textContent = watermark;
+    node.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (onOpen) onOpen(media, i);
+    });
+    container.appendChild(node);
+  });
+}
+
+function openLightbox(media, startIndex, watermark) {
+  const existing = document.getElementById('photo-lightbox-root');
+  if (existing) existing.remove();
+
+  const tpl = document.getElementById('tpl-photo-lightbox');
+  const box = tpl.content.firstElementChild.cloneNode(true);
+  box.id = 'photo-lightbox-root';
+
+  const imgEl  = box.querySelector('.photo-lightbox__img');
+  const wmEl   = box.querySelector('.photo-lightbox__watermark');
+  const prevBtn = box.querySelector('[data-action="prev"]');
+  const nextBtn = box.querySelector('[data-action="next"]');
+  const closeBtn = box.querySelector('[data-action="close"]');
+
+  let idx = startIndex || 0;
+
+  function show() {
+    const m = media[idx];
+    imgEl.src = buildMediaUrl(m.path);
+    wmEl.textContent = watermark;
+    prevBtn.style.display = idx > 0 ? '' : 'none';
+    nextBtn.style.display = idx < media.length - 1 ? '' : 'none';
+  }
+
+  prevBtn.addEventListener('click', (e) => { e.stopPropagation(); if (idx > 0) { idx--; show(); } });
+  nextBtn.addEventListener('click', (e) => { e.stopPropagation(); if (idx < media.length - 1) { idx++; show(); } });
+  closeBtn.addEventListener('click', (e) => { e.stopPropagation(); box.remove(); });
+  box.addEventListener('click', (e) => { if (e.target === box) box.remove(); });
+
+  document.addEventListener('keydown', function esc(e) {
+    if (e.key === 'Escape') { box.remove(); document.removeEventListener('keydown', esc); }
+  });
+
+  document.body.appendChild(box);
+  show();
+}
+
+function renderPostCard(post, { isHot = false, myVotes, myUid, watermark }) {
   const isPoll = post.type === 'poll';
   const tplId = isPoll ? 'tpl-poll-card' : (isHot ? 'tpl-hot-post' : 'tpl-post-card');
   const card = document.getElementById(tplId).content.firstElementChild.cloneNode(true);
@@ -284,7 +338,19 @@ function renderPostCard(post, { isHot = false, myVotes, myUid }) {
     cat.textContent = `#${post.category}`;
   }
 
-  card.querySelector('.post-card__body').textContent = post.content;
+  const bodyEl = card.querySelector('.post-card__body');
+  if (post.content) {
+    bodyEl.textContent = post.content;
+  } else {
+    bodyEl.remove();
+  }
+
+  const mediaWrap = card.querySelector('[data-role="media"]');
+  if (post.media && post.media.length && mediaWrap) {
+    renderMediaGrid(mediaWrap, post.media, watermark, (m, i) => openLightbox(m, i, watermark));
+  } else if (mediaWrap) {
+    mediaWrap.remove();
+  }
 
   const teaser = card.querySelector('.post-card__teaser');
   if (teaser && post.top_comment_text) {
@@ -325,11 +391,7 @@ function renderPostCard(post, { isHot = false, myVotes, myUid }) {
     try {
       await api.toggleVote(post.id, wasVoted);
       if (wasVoted) myVotes.delete(post.id); else myVotes.add(post.id);
-      // Liking implies seeing — record view if not already
-      if (!getViewedSet().has(post.id)) {
-        markViewed(post.id);
-        api.recordView(post.id).catch(() => {});
-      }
+      if (!getViewedSet().has(post.id)) { markViewed(post.id); api.recordView(post.id).catch(() => {}); }
     } catch {
       voteBtn.classList.toggle('is-liked');
       c.textContent = Number(c.textContent) + (wasVoted ? 1 : -1);
@@ -339,7 +401,7 @@ function renderPostCard(post, { isHot = false, myVotes, myUid }) {
 
   const goToPost = () => import('../router.js').then(r => r.navigate(`/p/${post.id}`));
   commentBtn.addEventListener('click', goToPost);
-  card.querySelector('.post-card__body').addEventListener('click', goToPost);
+  if (bodyEl) bodyEl.addEventListener('click', goToPost);
   shareBtn.addEventListener('click', (e) => { e.stopPropagation(); sharePost(post); });
   waBtn.addEventListener('click', (e) => { e.stopPropagation(); shareToWhatsApp(post); });
 
@@ -355,17 +417,9 @@ function renderPostCard(post, { isHot = false, myVotes, myUid }) {
 function renderPoll(box, data, post, card) {
   if (!box) return;
   box.innerHTML = '';
-
-  if (!data) {
-    box.appendChild(el('div', { class: 'poll--fallback' }, 'Tap to view poll'));
-    return;
-  }
-
+  if (!data) { box.appendChild(el('div', { class: 'poll--fallback' }, 'Tap to view poll')); return; }
   const options = data.options || [];
-  if (!options.length) {
-    box.appendChild(el('div', { class: 'poll--empty' }, 'No options yet'));
-    return;
-  }
+  if (!options.length) { box.appendChild(el('div', { class: 'poll--empty' }, 'No options yet')); return; }
 
   const total = data.total_votes || 0;
   const mine = data.my_option_id;
@@ -397,9 +451,7 @@ function renderPoll(box, data, post, card) {
           haptic(6);
           const fresh = await api.getPollResults(post.id);
           if (fresh) renderPoll(box, fresh, post, card);
-        } catch {
-          toast('Vote failed.');
-        }
+        } catch { toast('Vote failed.'); }
       });
       box.appendChild(row);
     }

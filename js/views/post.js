@@ -146,7 +146,6 @@ function buildPostCard(post) {
   const teaser = node.querySelector('.post-card__teaser');
   if (teaser) teaser.remove();
 
-  // FIXED: defensive guards around reach rendering
   const stats = node.querySelector('.post-card__stats');
   const reach = post.view_count || 0;
   if (stats && reach > 0) {
@@ -155,7 +154,7 @@ function buildPostCard(post) {
     if (cls) stats.classList.add(cls);
     const reachIcon = stats.querySelector('.post-card__reach-icon use');
     if (reachIcon) {
-      reachIcon.setAttribute('href', reach >= 500 ? '#i-flame' : '#i-megaphone');
+      reachIcon.setAttribute('href', reach >= 500 ? '#i-flame' : '#i-eye');
     }
     const reachEl = stats.querySelector('.post-card__reach');
     if (reachEl) reachEl.textContent = formatReach(reach);

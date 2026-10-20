@@ -6,33 +6,95 @@ export async function mount(root) {
   if (!api.isAuthed()) { window.__anon.openSignup(); return () => {}; }
 
   root.innerHTML = '';
-  const tpl = document.getElementById('tpl-me');
-  const screen = tpl.content.firstElementChild.cloneNode(true);
+  const screen = document.getElementById('tpl-me').content.firstElementChild.cloneNode(true);
   root.appendChild(screen);
 
   const aliasEl      = screen.querySelector('[data-role="alias"]');
   const sinceEl      = screen.querySelector('[data-role="since"]');
   const avatarEl     = screen.querySelector('[data-role="avatar"]');
   const renameBtn    = screen.querySelector('[data-role="rename"]');
-  const postCount    = screen.querySelector('[data-role="post-count"]');
-  const commentCount = screen.querySelector('[data-role="comment-count"]');
   const notifState   = screen.querySelector('[data-role="notif-state"]');
 
-  let profile;
-  try { profile = await api.getProfile(); }
-  catch { toast('Could not load profile.'); return () => {}; }
-  if (!profile) return () => {};
+  // ---- Parallel data fetch ----
+  const [profile, weekly, best, goal, milestones] = await Promise.all([
+    api.getProfile().catch(() => null),
+    api.myStatsThisWeek().catch(() => null),
+    api.myBestPost().catch(() => null),
+    api.campusGoalProgress().catch(() => null),
+    api.myMilestones().catch(() => []),
+  ]);
 
+  if (!profile) {
+    toast('Could not load profile.');
+    return () => {};
+  }
+
+  // ---- Identity ----
   aliasEl.textContent = profile.alias;
   renderAvatar(avatarEl, profile.alias, 'lg');
-
   const since = new Date(profile.created_at);
   sinceEl.textContent = `Anonymous since ${since.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`;
 
-  api.countMyPosts().then(n => postCount.textContent = n).catch(() => {});
-  api.countMyComments().then(n => commentCount.textContent = n).catch(() => {});
+  // ---- This week ----
+  const weeklyEl = screen.querySelector('[data-role="weekly"]');
+  if (weekly && (weekly.posts_this_week > 0 || weekly.likes_received_this_week > 0 || weekly.total_reach > 0)) {
+    weeklyEl.hidden = false;
+    screen.querySelector('[data-role="weekly-posts"]').textContent = weekly.posts_this_week || 0;
+    screen.querySelector('[data-role="weekly-likes"]').textContent = weekly.likes_received_this_week || 0;
+    screen.querySelector('[data-role="weekly-reach"]').textContent = formatNum(weekly.total_reach || 0);
+  }
 
-  // ----- Change name -----
+  // ---- Best post ----
+  const bestEl = screen.querySelector('[data-role="best-post"]');
+  if (best && best.id) {
+    bestEl.hidden = false;
+    const quote = best.content.length > 140 ? best.content.slice(0, 137) + '…' : best.content;
+    screen.querySelector('[data-role="best-post-quote"]').textContent = `"${quote}"`;
+    screen.querySelector('[data-role="best-post-likes"]').textContent = best.upvote_count || 0;
+    screen.querySelector('[data-role="best-post-comments"]').textContent = best.comment_count || 0;
+    screen.querySelector('[data-role="best-post-reach"]').textContent = formatNum(best.view_count || 0);
+    screen.querySelector('[data-role="best-post-card"]').addEventListener('click', () => {
+      navigate(`/p/${best.id}`);
+    });
+  }
+
+  // ---- Campus goal ----
+  const goalEl = screen.querySelector('[data-role="campus-goal"]');
+  if (goal && goal.target) {
+    goalEl.hidden = false;
+    const joined = goal.joined || 0;
+    const target = goal.target || 500;
+    const pct = Math.min(100, Math.round((joined / target) * 100));
+    screen.querySelector('[data-role="goal-joined"]').textContent = joined;
+    screen.querySelector('[data-role="goal-target"]').textContent = target;
+    screen.querySelector('[data-role="goal-fill"]').style.width = `${pct}%`;
+  }
+  screen.querySelector('[data-action="share-app"]').addEventListener('click', () => {
+    const url = location.origin;
+    const text = `Join me on Anonymous — anonymous campus feed. Use CAMPUS-ONE: ${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  });
+
+  // ---- Milestones ----
+  const milestonesEl = screen.querySelector('[data-role="milestones"]');
+  const listEl       = screen.querySelector('[data-role="milestones-list"]');
+  if (Array.isArray(milestones) && milestones.length) {
+    milestonesEl.hidden = false;
+    const tpl = document.getElementById('tpl-milestone-item');
+    milestones.forEach(m => {
+      const node = tpl.content.firstElementChild.cloneNode(true);
+      node.querySelector('.milestone__label').textContent = m.label;
+      if (m.achieved) {
+        node.classList.add('is-achieved');
+        node.querySelector('.milestone__progress').textContent = '';
+      } else {
+        node.querySelector('.milestone__progress').textContent = `${m.progress || 0}/${m.target}`;
+      }
+      listEl.appendChild(node);
+    });
+  }
+
+  // ---- Rename ----
   renameBtn.addEventListener('click', () => {
     const tpl = document.getElementById('tpl-rename-sheet');
     const node = tpl.content.firstElementChild.cloneNode(true);
@@ -79,14 +141,14 @@ export async function mount(root) {
     setTimeout(() => input.focus(), 250);
   });
 
-  // ----- Log out -----
+  // ---- Logout ----
   screen.querySelector('[data-action="logout"]').addEventListener('click', async () => {
     await api.signOut();
     window.__anon.updateAuthUI();
     navigate('/');
   });
 
-  // ----- Delete account -----
+  // ---- Delete ----
   screen.querySelector('[data-action="delete"]').addEventListener('click', async () => {
     if (!confirm('Delete your account? Your email and profile will be removed, and your posts and replies will be shown as [deleted].')) return;
     if (!confirm('Are you absolutely sure? This cannot be undone.')) return;
@@ -101,33 +163,22 @@ export async function mount(root) {
     }
   });
 
-  // ----- Stats clicks -----
-  screen.querySelector('[data-action="my-posts"]').addEventListener('click', () => toast('Your posts are shown on the feed.'));
-  screen.querySelector('[data-action="my-replies"]').addEventListener('click', () => toast('Your replies are shown on their posts.'));
-
-  // ----- Notifications -----
-  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-    notifState.textContent = 'Unavailable';
-  } else if (Notification.permission === 'granted') {
-    notifState.textContent = 'On';
-  } else if (Notification.permission === 'denied') {
-    notifState.textContent = 'Blocked';
-  } else {
-    notifState.textContent = 'Off';
-  }
+  // ---- Notifications ----
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) notifState.textContent = 'Unavailable';
+  else if (Notification.permission === 'granted') notifState.textContent = 'On';
+  else if (Notification.permission === 'denied') notifState.textContent = 'Blocked';
+  else notifState.textContent = 'Off';
 
   screen.querySelector('[data-action="notifications"]').addEventListener('click', async () => {
     if (!('Notification' in window)) return toast('Notifications not supported.');
     if (Notification.permission === 'denied') return toast('Notifications blocked in browser settings.');
-
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') { toast('Notifications declined.'); notifState.textContent = 'Off'; return; }
-
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array('sb_publishable_Xx5XhDyo6bDZ1Edahrw3Ug_T86ChpUW'),
+        applicationServerKey: urlBase64ToUint8Array('YOUR_VAPID_PUBLIC_KEY'),
       });
       await api.savePushSubscription(sub.toJSON());
       notifState.textContent = 'On';
@@ -140,6 +191,12 @@ export async function mount(root) {
   });
 
   return () => {};
+}
+
+function formatNum(n) {
+  if (n < 1000) return String(n);
+  if (n < 10000) return (n / 1000).toFixed(1).replace('.0', '') + 'k';
+  return Math.floor(n / 1000) + 'k';
 }
 
 function urlBase64ToUint8Array(base64String) {

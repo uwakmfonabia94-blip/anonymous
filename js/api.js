@@ -73,8 +73,8 @@ export async function authFetch(path, opts = {}, retry = true) {
 const rpc     = (name, args) => publicFetch(`/rest/v1/rpc/${name}`, { method: 'POST', body: JSON.stringify(args) });
 const authRpc = (name, args) => authFetch(`/rest/v1/rpc/${name}`, { method: 'POST', body: JSON.stringify(args) });
 
-// NEW: uses the user's token when authed (so auth.uid() works inside SQL),
-// anon token otherwise. Critical for poll voting to reflect correctly.
+// Uses the user's token when authed — critical for auth.uid() inside SQL RPCs
+// (poll my_option_id, feed_posts media scoping, etc.). Falls back to anon.
 const rpcAuto = (name, args) => isAuthed() ? authRpc(name, args) : rpc(name, args);
 
 // ---------- AUTH ----------
@@ -148,8 +148,6 @@ export function getViewerKey() {
 }
 
 // ---------- FEED ----------
-// FIXED: rpcAuto — so feed_posts gets the user's token and get_poll_results
-// inside it returns my_option_id for polls the user has voted on.
 
 export const listFeed = async ({ limit = 20, before = null, category = null } = {}) =>
   rpcAuto('feed_posts', {
@@ -213,7 +211,6 @@ export async function getPostCounts(postIds) {
 }
 
 // ---------- SINGLE POST ----------
-// FIXED: primary call uses rpcAuto so poll_data has correct my_option_id.
 
 export async function getPostFull(id) {
   try {
@@ -230,7 +227,7 @@ export async function getPostFull(id) {
     const p = rows?.[0];
     if (!p) return null;
 
-    let upvote_count = 0, comment_count = 0, poll_data = null;
+    let upvote_count = 0, comment_count = 0, poll_data = null, media = [];
     try {
       const v = await publicFetch(`/rest/v1/upvotes?post_id=eq.${id}&select=user_id`);
       upvote_count = v?.length || 0;
@@ -238,6 +235,14 @@ export async function getPostFull(id) {
     try {
       const c = await publicFetch(`/rest/v1/comments?post_id=eq.${id}&select=id`);
       comment_count = c?.length || 0;
+    } catch {}
+    try {
+      const m = await publicFetch(
+        `/rest/v1/post_media?post_id=eq.${id}&select=id,storage_path,width,height,position&order=position.asc`
+      );
+      media = (m || []).map(x => ({
+        id: x.id, path: x.storage_path, w: x.width, h: x.height, position: x.position,
+      }));
     } catch {}
     if (p.type === 'poll') {
       try {
@@ -250,7 +255,7 @@ export async function getPostFull(id) {
       created_at: p.created_at, author_id: p.author_id,
       author_alias: p.author?.alias || 'Unknown',
       upvote_count, comment_count, view_count: p.view_count || 0,
-      type: p.type || 'text', poll_data,
+      type: p.type || 'text', poll_data, media,
     };
   } catch (err) {
     console.error('[getPostFull] REST fallback also failed:', err);
@@ -320,7 +325,6 @@ export async function votePoll(postId, optionId) {
   return await authRpc('vote_poll', { p_post_id: postId, p_option_id: optionId });
 }
 
-// FIXED: rpcAuto — so my_option_id is populated for the current user
 export async function getPollResults(postId) {
   try {
     return await rpcAuto('get_poll_results', { p_post_id: postId });
@@ -449,6 +453,78 @@ export async function campusGoalProgress() {
 export async function myMilestones() {
   try { const result = await authRpc('my_milestones', {}); return Array.isArray(result) ? result : []; }
   catch { return []; }
+}
+
+// ---------- PHOTO MEDIA ----------
+
+export async function uploadMediaBlob(blob, path) {
+  const s = getSession();
+  if (!s?.access_token) throw new Error('auth_required');
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/post-media/${path}`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${s.access_token}`,
+      'Content-Type': 'image/jpeg',
+      // x-upsert removed: path is unique per postId+position, so no collision possible.
+      // Upserting requires SELECT+UPDATE storage policies — we only have INSERT.
+    },
+    body: blob,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    console.error('[uploadMediaBlob] failed:', res.status, text);
+    throw new Error('upload_failed_' + res.status + ': ' + text);
+  }
+  return true;
+}
+
+export async function deleteMediaBlob(path) {
+  const s = getSession();
+  if (!s?.access_token) return;
+  await fetch(`${SUPABASE_URL}/storage/v1/object/post-media/${path}`, {
+    method: 'DELETE',
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${s.access_token}`,
+    },
+  }).catch(() => {});
+}
+
+export async function insertPostMedia({ postId, path, width, height, position }) {
+  await authFetch(`/rest/v1/post_media`, {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify([{
+      post_id: postId,
+      storage_path: path,
+      width,
+      height,
+      position,
+    }]),
+  });
+}
+
+// ---------- ALIAS CACHE (for watermark) ----------
+
+export function getCachedAlias() {
+  const s = getSession();
+  return s?.alias || null;
+}
+
+export async function ensureAliasCached() {
+  if (getCachedAlias()) return getCachedAlias();
+  if (!isAuthed()) return null;
+  try {
+    const profile = await getProfile();
+    if (profile?.alias) {
+      const s = getSession();
+      s.alias = profile.alias;
+      localStorage.setItem('anon.session', JSON.stringify(s));
+      return profile.alias;
+    }
+  } catch {}
+  return null;
 }
 
 // ---------- PUSH ----------

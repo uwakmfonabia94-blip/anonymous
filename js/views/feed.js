@@ -11,6 +11,18 @@ const SPICE_PROMPTS = [
   { badge: 'Suggested topic',     text: "What's the most overrated place on campus?" },
 ];
 
+const VIEWED_KEY = 'anon.viewedPosts';
+
+function getViewedSet() {
+  try { return new Set(JSON.parse(sessionStorage.getItem(VIEWED_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+function markViewed(postId) {
+  const set = getViewedSet();
+  set.add(postId);
+  sessionStorage.setItem(VIEWED_KEY, JSON.stringify([...set]));
+}
+
 export async function mount(root) {
   root.innerHTML = '';
   const screen = document.getElementById('tpl-feed-screen').content.firstElementChild.cloneNode(true);
@@ -59,8 +71,42 @@ export async function mount(root) {
   }
   const myUid = api.isAuthed() ? api.getSession()?.user_id : null;
 
+  // --- View tracking observer ---
+  const viewedSet = getViewedSet();
+  const viewObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const card = entry.target;
+      const postId = card.dataset.postId;
+      if (!postId || viewedSet.has(postId)) return;
+
+      const timer = setTimeout(async () => {
+        if (!card.isConnected) return;
+        if (viewedSet.has(postId)) return;
+        viewedSet.add(postId);
+        markViewed(postId);
+        try {
+          const newCount = await api.recordView(postId);
+          if (typeof newCount === 'number' && newCount > 0) {
+            const stats = card.querySelector('.post-card__stats');
+            updateReachDisplay(stats, newCount, { animate: true });
+          }
+        } catch {}
+      }, 1000);
+
+      card._viewTimer = timer;
+      viewObserver.unobserve(card);
+    });
+  }, { threshold: 0.5 });
+
+  const observeCard = (card) => {
+    viewObserver.observe(card);
+  };
+
   if (hotPost && hotPost.id) {
-    feed.appendChild(renderPostCard(hotPost, { isHot: true, myVotes, myUid }));
+    const hotCard = renderPostCard(hotPost, { isHot: true, myVotes, myUid });
+    feed.appendChild(hotCard);
+    observeCard(hotCard);
   }
 
   let lastSectionGroup = null;
@@ -81,6 +127,7 @@ export async function mount(root) {
       renderSection(sectionFor(post.created_at));
       const card = renderPostCard(post, { myVotes, myUid });
       feed.appendChild(card);
+      observeCard(card);
       renderedCount++;
       if (post.id === justPostedId) {
         card.classList.add('post-card--landed');
@@ -104,7 +151,7 @@ export async function mount(root) {
 
   let loading = false;
   let done = false;
-  const observer = new IntersectionObserver(async (entries) => {
+  const scrollObserver = new IntersectionObserver(async (entries) => {
     if (!entries[0].isIntersecting || loading || done) return;
     loading = true;
     try {
@@ -121,10 +168,11 @@ export async function mount(root) {
       appendPosts(more);
     } catch {} finally { loading = false; }
   }, { rootMargin: '200px' });
-  observer.observe(sentinel);
+  scrollObserver.observe(sentinel);
 
   return () => {
-    observer.disconnect();
+    scrollObserver.disconnect();
+    viewObserver.disconnect();
     clearInterval(newPostsBar.interval);
     clearInterval(reachTimer);
   };
@@ -277,6 +325,11 @@ function renderPostCard(post, { isHot = false, myVotes, myUid }) {
     try {
       await api.toggleVote(post.id, wasVoted);
       if (wasVoted) myVotes.delete(post.id); else myVotes.add(post.id);
+      // Liking implies seeing — record view if not already
+      if (!getViewedSet().has(post.id)) {
+        markViewed(post.id);
+        api.recordView(post.id).catch(() => {});
+      }
     } catch {
       voteBtn.classList.toggle('is-liked');
       c.textContent = Number(c.textContent) + (wasVoted ? 1 : -1);

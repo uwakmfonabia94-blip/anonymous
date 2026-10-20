@@ -31,10 +31,16 @@ export async function mount(root, params) {
     return () => {};
   }
 
-  api.recordView(post.id).catch(() => {});
-
   const built = buildPostCard(post);
   postBox.appendChild(built.card);
+
+  // Record view and update UI immediately with the returned count
+  api.recordView(post.id).then(newCount => {
+    if (typeof newCount === 'number' && newCount > 0) {
+      const stats = built.card.querySelector('.post-card__stats');
+      updateReachDisplay(stats, newCount, { animate: true });
+    }
+  }).catch(() => {});
 
   const reachTimer = startPostPolling(built.card, post.id);
 

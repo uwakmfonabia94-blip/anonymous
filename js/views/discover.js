@@ -3,6 +3,18 @@ import { timeAgo, renderAvatar, el, toast, sharePost, shareToWhatsApp, haptic,
          formatReach, reachClass } from '../ui.js';
 import { navigate } from '../router.js';
 
+const VIEWED_KEY = 'anon.viewedPosts';
+
+function getViewedSet() {
+  try { return new Set(JSON.parse(sessionStorage.getItem(VIEWED_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+function markViewed(postId) {
+  const set = getViewedSet();
+  set.add(postId);
+  sessionStorage.setItem(VIEWED_KEY, JSON.stringify([...set]));
+}
+
 export async function mount(root) {
   root.innerHTML = '';
   const screen = document.getElementById('tpl-discover').content.firstElementChild.cloneNode(true);
@@ -11,6 +23,32 @@ export async function mount(root) {
   const chips = screen.querySelectorAll('.chip');
   const feed  = screen.querySelector('[data-role="feed"]');
   let category = null;
+
+  const viewObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const card = entry.target;
+      const postId = card.dataset.postId;
+      if (!postId) return;
+      const viewedSet = getViewedSet();
+      if (viewedSet.has(postId)) return;
+
+      setTimeout(async () => {
+        if (!card.isConnected) return;
+        if (getViewedSet().has(postId)) return;
+        markViewed(postId);
+        try {
+          const newCount = await api.recordView(postId);
+          if (typeof newCount === 'number' && newCount > 0) {
+            const stats = card.querySelector('.post-card__stats');
+            updateReachDisplay(stats, newCount, { animate: true });
+          }
+        } catch {}
+      }, 1000);
+
+      viewObserver.unobserve(card);
+    });
+  }, { threshold: 0.5 });
 
   async function load() {
     feed.innerHTML = '';
@@ -35,7 +73,9 @@ export async function mount(root) {
       const myUid = api.isAuthed() ? api.getSession()?.user_id : null;
 
       for (const post of posts) {
-        feed.appendChild(renderCard(post, { myVotes, myUid }));
+        const card = renderCard(post, { myVotes, myUid });
+        feed.appendChild(card);
+        viewObserver.observe(card);
       }
     } catch (err) {
       console.error(err);
@@ -55,7 +95,7 @@ export async function mount(root) {
 
   await load();
   const reachTimer = startReachPolling(feed);
-  return () => clearInterval(reachTimer);
+  return () => { clearInterval(reachTimer); viewObserver.disconnect(); };
 }
 
 function updateReachDisplay(stats, reach, { animate = false } = {}) {
@@ -175,6 +215,10 @@ function renderCard(post, { myVotes, myUid }) {
     try {
       await api.toggleVote(post.id, wasVoted);
       if (wasVoted) myVotes.delete(post.id); else myVotes.add(post.id);
+      if (!getViewedSet().has(post.id)) {
+        markViewed(post.id);
+        api.recordView(post.id).catch(() => {});
+      }
     } catch {
       voteBtn.classList.toggle('is-liked');
       c.textContent = Number(c.textContent) + (wasVoted ? 1 : -1);

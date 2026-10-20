@@ -73,6 +73,10 @@ export async function authFetch(path, opts = {}, retry = true) {
 const rpc     = (name, args) => publicFetch(`/rest/v1/rpc/${name}`, { method: 'POST', body: JSON.stringify(args) });
 const authRpc = (name, args) => authFetch(`/rest/v1/rpc/${name}`, { method: 'POST', body: JSON.stringify(args) });
 
+// NEW: uses the user's token when authed (so auth.uid() works inside SQL),
+// anon token otherwise. Critical for poll voting to reflect correctly.
+const rpcAuto = (name, args) => isAuthed() ? authRpc(name, args) : rpc(name, args);
+
 // ---------- AUTH ----------
 
 export async function signUp({ email, password, inviteCode, agreed, alias }) {
@@ -144,9 +148,11 @@ export function getViewerKey() {
 }
 
 // ---------- FEED ----------
+// FIXED: rpcAuto — so feed_posts gets the user's token and get_poll_results
+// inside it returns my_option_id for polls the user has voted on.
 
 export const listFeed = async ({ limit = 20, before = null, category = null } = {}) =>
-  rpc('feed_posts', {
+  rpcAuto('feed_posts', {
     p_university_id: await universityId(),
     p_limit: limit,
     p_before: before,
@@ -155,14 +161,14 @@ export const listFeed = async ({ limit = 20, before = null, category = null } = 
 
 export async function getHotPost() {
   try {
-    const rows = await rpc('get_hot_post', { p_university_id: await universityId() });
+    const rows = await rpcAuto('get_hot_post', { p_university_id: await universityId() });
     return rows?.[0] || null;
   } catch { return null; }
 }
 
 export async function countNewPostsSince(since) {
   try {
-    return await rpc('count_new_posts_since', {
+    return await rpcAuto('count_new_posts_since', {
       p_university_id: await universityId(),
       p_since: since,
     });
@@ -207,10 +213,11 @@ export async function getPostCounts(postIds) {
 }
 
 // ---------- SINGLE POST ----------
+// FIXED: primary call uses rpcAuto so poll_data has correct my_option_id.
 
 export async function getPostFull(id) {
   try {
-    const rows = await rpc('get_post_full', { p_id: id });
+    const rows = await rpcAuto('get_post_full', { p_id: id });
     if (rows?.[0]) return rows[0];
   } catch (err) {
     console.warn('[getPostFull] RPC failed, falling back to REST:', err.message || err);
@@ -234,10 +241,7 @@ export async function getPostFull(id) {
     } catch {}
     if (p.type === 'poll') {
       try {
-        poll_data = await publicFetch('/rest/v1/rpc/get_poll_results', {
-          method: 'POST',
-          body: JSON.stringify({ p_post_id: id }),
-        });
+        poll_data = await rpcAuto('get_poll_results', { p_post_id: id });
       } catch {}
     }
 
@@ -316,12 +320,10 @@ export async function votePoll(postId, optionId) {
   return await authRpc('vote_poll', { p_post_id: postId, p_option_id: optionId });
 }
 
+// FIXED: rpcAuto — so my_option_id is populated for the current user
 export async function getPollResults(postId) {
   try {
-    return await publicFetch('/rest/v1/rpc/get_poll_results', {
-      method: 'POST',
-      body: JSON.stringify({ p_post_id: postId }),
-    });
+    return await rpcAuto('get_poll_results', { p_post_id: postId });
   } catch { return null; }
 }
 

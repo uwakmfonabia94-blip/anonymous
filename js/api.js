@@ -130,7 +130,7 @@ export async function universityId() {
 export const checkInviteCode     = (code)  => rpc('check_invite_code',     { p_code: code });
 export const checkAliasAvailable = (alias) => rpc('check_alias_available', { p_alias: alias });
 
-// ---------- VIEWER KEY (dedup for reach) ----------
+// ---------- VIEWER KEY ----------
 
 export function getViewerKey() {
   if (isAuthed()) return getSession().user_id;
@@ -187,6 +187,25 @@ export async function recordView(postId) {
   } catch { return 0; }
 }
 
+// ---------- POST COUNTS (polling for realtime updates) ----------
+
+export async function getPostCounts(postIds) {
+  if (!postIds?.length) return {};
+  const list = postIds.map(id => `"${id}"`).join(',');
+  try {
+    const [postsRes, upvotesRes, commentsRes] = await Promise.all([
+      publicFetch(`/rest/v1/posts?id=in.(${list})&select=id,view_count`),
+      publicFetch(`/rest/v1/upvotes?post_id=in.(${list})&select=post_id`),
+      publicFetch(`/rest/v1/comments?post_id=in.(${list})&select=post_id`),
+    ]);
+    const map = {};
+    (postsRes || []).forEach(p => { map[p.id] = { view: p.view_count || 0, upvote: 0, comment: 0 }; });
+    (upvotesRes || []).forEach(u => { if (map[u.post_id]) map[u.post_id].upvote++; });
+    (commentsRes || []).forEach(c => { if (map[c.post_id]) map[c.post_id].comment++; });
+    return map;
+  } catch { return {}; }
+}
+
 // ---------- SINGLE POST ----------
 
 export async function getPostFull(id) {
@@ -196,13 +215,15 @@ export async function getPostFull(id) {
   } catch (err) {
     console.warn('[getPostFull] RPC failed, falling back to REST:', err.message || err);
   }
+
   try {
     const rows = await publicFetch(
-      `/rest/v1/posts?id=eq.${id}&select=id,content,category,shareable,created_at,view_count,author_id,author:profiles!author_id(alias)`
+      `/rest/v1/posts?id=eq.${id}&select=id,content,category,shareable,created_at,view_count,type,author_id,author:profiles!author_id(alias)`
     );
     const p = rows?.[0];
     if (!p) return null;
-    let upvote_count = 0, comment_count = 0;
+
+    let upvote_count = 0, comment_count = 0, poll_data = null;
     try {
       const v = await publicFetch(`/rest/v1/upvotes?post_id=eq.${id}&select=user_id`);
       upvote_count = v?.length || 0;
@@ -211,12 +232,21 @@ export async function getPostFull(id) {
       const c = await publicFetch(`/rest/v1/comments?post_id=eq.${id}&select=id`);
       comment_count = c?.length || 0;
     } catch {}
+    if (p.type === 'poll') {
+      try {
+        poll_data = await publicFetch('/rest/v1/rpc/get_poll_results', {
+          method: 'POST',
+          body: JSON.stringify({ p_post_id: id }),
+        });
+      } catch {}
+    }
+
     return {
       id: p.id, content: p.content, category: p.category, shareable: p.shareable,
       created_at: p.created_at, author_id: p.author_id,
       author_alias: p.author?.alias || 'Unknown',
       upvote_count, comment_count, view_count: p.view_count || 0,
-      type: p.type || 'text', poll_data: null,
+      type: p.type || 'text', poll_data,
     };
   } catch (err) {
     console.error('[getPostFull] REST fallback also failed:', err);
@@ -403,31 +433,20 @@ export async function countMyComments() {
 // ---------- ME DASHBOARD ----------
 
 export async function myStatsThisWeek() {
-  try {
-    const rows = await authRpc('my_stats_this_week', {});
-    return rows?.[0] || null;
-  } catch { return null; }
+  try { const rows = await authRpc('my_stats_this_week', {}); return rows?.[0] || null; }
+  catch { return null; }
 }
-
 export async function myBestPost() {
-  try {
-    const rows = await authRpc('my_best_post', {});
-    return rows?.[0] || null;
-  } catch { return null; }
+  try { const rows = await authRpc('my_best_post', {}); return rows?.[0] || null; }
+  catch { return null; }
 }
-
 export async function campusGoalProgress() {
-  try {
-    const rows = await authRpc('campus_goal_progress', {});
-    return rows?.[0] || null;
-  } catch { return null; }
+  try { const rows = await authRpc('campus_goal_progress', {}); return rows?.[0] || null; }
+  catch { return null; }
 }
-
 export async function myMilestones() {
-  try {
-    const result = await authRpc('my_milestones', {});
-    return Array.isArray(result) ? result : [];
-  } catch { return []; }
+  try { const result = await authRpc('my_milestones', {}); return Array.isArray(result) ? result : []; }
+  catch { return []; }
 }
 
 // ---------- PUSH ----------

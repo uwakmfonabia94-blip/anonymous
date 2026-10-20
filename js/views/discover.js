@@ -54,7 +54,73 @@ export async function mount(root) {
   });
 
   await load();
-  return () => {};
+  const reachTimer = startReachPolling(feed);
+  return () => clearInterval(reachTimer);
+}
+
+function updateReachDisplay(stats, reach, { animate = false } = {}) {
+  if (!stats) return;
+  const wasZero = Number(stats.dataset.reach || 0) === 0;
+  stats.hidden = reach === 0;
+  stats.classList.remove('post-card__reach--quiet', 'post-card__reach--warm', 'post-card__reach--hot');
+  const cls = reachClass(reach);
+  if (cls) stats.classList.add(cls);
+  const icon = stats.querySelector('.post-card__reach-icon use');
+  if (icon) icon.setAttribute('href', reach >= 500 ? '#i-flame' : '#i-eye');
+  const reachEl = stats.querySelector('.post-card__reach');
+  if (reachEl) {
+    reachEl.textContent = formatReach(reach);
+    if (animate && !wasZero) bumpEl(reachEl, 'post-card__reach--bump');
+  }
+  stats.dataset.reach = String(reach);
+}
+
+function bumpEl(node, className) {
+  if (!node) return;
+  node.classList.remove(className);
+  void node.offsetWidth;
+  node.classList.add(className);
+}
+
+function startReachPolling(feed) {
+  return setInterval(async () => {
+    if (document.hidden) return;
+    const cards = Array.from(feed.querySelectorAll('.post-card')).slice(0, 60);
+    if (!cards.length) return;
+    const ids = cards.map(c => c.dataset.postId).filter(Boolean);
+    if (!ids.length) return;
+    try {
+      const counts = await api.getPostCounts(ids);
+      for (const card of cards) {
+        const c = counts[card.dataset.postId];
+        if (!c) continue;
+
+        const stats = card.querySelector('.post-card__stats');
+        if (stats) {
+          const current = Number(stats.dataset.reach || 0);
+          if (c.view > current) updateReachDisplay(stats, c.view, { animate: true });
+        }
+
+        const voteCount = card.querySelector('[data-action="vote"] .post-card__count');
+        if (voteCount) {
+          const cur = Number(voteCount.textContent || 0);
+          if (c.upvote > cur) {
+            voteCount.textContent = c.upvote;
+            bumpEl(voteCount, 'count-bump');
+          }
+        }
+
+        const commentCount = card.querySelector('[data-action="open"] .post-card__count');
+        if (commentCount) {
+          const cur = Number(commentCount.textContent || 0);
+          if (c.comment > cur) {
+            commentCount.textContent = c.comment;
+            bumpEl(commentCount, 'count-bump');
+          }
+        }
+      }
+    } catch {}
+  }, 30000);
 }
 
 function renderCard(post, { myVotes, myUid }) {
@@ -84,20 +150,9 @@ function renderCard(post, { myVotes, myUid }) {
   }
 
   const stats = card.querySelector('.post-card__stats');
-  const reach = post.view_count || 0;
-  if (stats && reach > 0) {
-    stats.hidden = false;
-    const cls = reachClass(reach);
-    if (cls) stats.classList.add(cls);
-    const reachIcon = stats.querySelector('.post-card__reach-icon use');
-    if (reachIcon) {
-      reachIcon.setAttribute('href', reach >= 500 ? '#i-flame' : '#i-eye');
-    }
-    const reachEl = stats.querySelector('.post-card__reach');
-    if (reachEl) reachEl.textContent = formatReach(reach);
-  }
+  updateReachDisplay(stats, post.view_count || 0);
 
-  if (isPoll && post.poll_data) {
+  if (isPoll) {
     renderPoll(card.querySelector('[data-role="poll"]'), post.poll_data, post);
   }
 
@@ -129,7 +184,7 @@ function renderCard(post, { myVotes, myUid }) {
 
   const go = () => navigate(`/p/${post.id}`);
   commentBtn.addEventListener('click', go);
-  if (!isPoll) card.querySelector('.post-card__body').addEventListener('click', go);
+  card.querySelector('.post-card__body').addEventListener('click', go);
   shareBtn.addEventListener('click', (e) => { e.stopPropagation(); sharePost(post); });
   if (waBtn) waBtn.addEventListener('click', (e) => { e.stopPropagation(); shareToWhatsApp(post); });
 
@@ -137,9 +192,20 @@ function renderCard(post, { myVotes, myUid }) {
 }
 
 function renderPoll(box, data, post) {
-  if (!box || !data) return;
+  if (!box) return;
   box.innerHTML = '';
+
+  if (!data) {
+    box.appendChild(el('div', { class: 'poll--fallback' }, 'Tap to view poll'));
+    return;
+  }
+
   const options = data.options || [];
+  if (!options.length) {
+    box.appendChild(el('div', { class: 'poll--empty' }, 'No options yet'));
+    return;
+  }
+
   const total = data.total_votes || 0;
   const mine = data.my_option_id;
   const closed = data.closed;
@@ -162,7 +228,8 @@ function renderPoll(box, data, post) {
     for (const opt of options) {
       const row = document.getElementById('tpl-poll-option-vote').content.firstElementChild.cloneNode(true);
       row.querySelector('.poll-option__label').textContent = opt.label;
-      row.addEventListener('click', async () => {
+      row.addEventListener('click', async (e) => {
+        e.stopPropagation();
         if (!api.isAuthed()) return window.__anon.openSignup();
         try {
           await api.votePoll(post.id, opt.option_id);

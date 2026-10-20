@@ -100,6 +100,8 @@ export async function mount(root) {
     feed.appendChild(document.getElementById('tpl-soft-wall').content.firstElementChild.cloneNode(true));
   }
 
+  const reachTimer = startReachPolling(feed);
+
   let loading = false;
   let done = false;
   const observer = new IntersectionObserver(async (entries) => {
@@ -124,6 +126,7 @@ export async function mount(root) {
   return () => {
     observer.disconnect();
     clearInterval(newPostsBar.interval);
+    clearInterval(reachTimer);
   };
 }
 
@@ -149,6 +152,71 @@ function renderSpiceCard(triggerAt) {
     import('../router.js').then(r => r.navigate('/compose'));
   });
   return card;
+}
+
+function updateReachDisplay(stats, reach, { animate = false } = {}) {
+  if (!stats) return;
+  const wasZero = Number(stats.dataset.reach || 0) === 0;
+  stats.hidden = reach === 0;
+  stats.classList.remove('post-card__reach--quiet', 'post-card__reach--warm', 'post-card__reach--hot');
+  const cls = reachClass(reach);
+  if (cls) stats.classList.add(cls);
+  const icon = stats.querySelector('.post-card__reach-icon use');
+  if (icon) icon.setAttribute('href', reach >= 500 ? '#i-flame' : '#i-eye');
+  const reachEl = stats.querySelector('.post-card__reach');
+  if (reachEl) {
+    reachEl.textContent = formatReach(reach);
+    if (animate && !wasZero) bumpEl(reachEl, 'post-card__reach--bump');
+  }
+  stats.dataset.reach = String(reach);
+}
+
+function bumpEl(node, className) {
+  if (!node) return;
+  node.classList.remove(className);
+  void node.offsetWidth;
+  node.classList.add(className);
+}
+
+function startReachPolling(feed) {
+  return setInterval(async () => {
+    if (document.hidden) return;
+    const cards = Array.from(feed.querySelectorAll('.post-card')).slice(0, 60);
+    if (!cards.length) return;
+    const ids = cards.map(c => c.dataset.postId).filter(Boolean);
+    if (!ids.length) return;
+    try {
+      const counts = await api.getPostCounts(ids);
+      for (const card of cards) {
+        const c = counts[card.dataset.postId];
+        if (!c) continue;
+
+        const stats = card.querySelector('.post-card__stats');
+        if (stats) {
+          const current = Number(stats.dataset.reach || 0);
+          if (c.view > current) updateReachDisplay(stats, c.view, { animate: true });
+        }
+
+        const voteBtn = card.querySelector('[data-action="vote"] .post-card__count');
+        if (voteBtn) {
+          const current = Number(voteBtn.textContent || 0);
+          if (c.upvote > current) {
+            voteBtn.textContent = c.upvote;
+            bumpEl(voteBtn, 'count-bump');
+          }
+        }
+
+        const commentBtn = card.querySelector('[data-action="open"] .post-card__count');
+        if (commentBtn) {
+          const current = Number(commentBtn.textContent || 0);
+          if (c.comment > current) {
+            commentBtn.textContent = c.comment;
+            bumpEl(commentBtn, 'count-bump');
+          }
+        }
+      }
+    } catch {}
+  }, 30000);
 }
 
 function renderPostCard(post, { isHot = false, myVotes, myUid }) {
@@ -180,20 +248,9 @@ function renderPostCard(post, { isHot = false, myVotes, myUid }) {
   }
 
   const stats = card.querySelector('.post-card__stats');
-  const reach = post.view_count || 0;
-  if (stats && reach > 0) {
-    stats.hidden = false;
-    const cls = reachClass(reach);
-    if (cls) stats.classList.add(cls);
-    const reachIcon = stats.querySelector('.post-card__reach-icon use');
-    if (reachIcon) {
-      reachIcon.setAttribute('href', reach >= 500 ? '#i-flame' : '#i-eye');
-    }
-    const reachEl = stats.querySelector('.post-card__reach');
-    if (reachEl) reachEl.textContent = formatReach(reach);
-  }
+  updateReachDisplay(stats, post.view_count || 0);
 
-  if (isPoll && post.poll_data) {
+  if (isPoll) {
     renderPoll(card.querySelector('[data-role="poll"]'), post.poll_data, post, card);
   }
 
@@ -229,7 +286,7 @@ function renderPostCard(post, { isHot = false, myVotes, myUid }) {
 
   const goToPost = () => import('../router.js').then(r => r.navigate(`/p/${post.id}`));
   commentBtn.addEventListener('click', goToPost);
-  if (!isPoll) card.querySelector('.post-card__body').addEventListener('click', goToPost);
+  card.querySelector('.post-card__body').addEventListener('click', goToPost);
   shareBtn.addEventListener('click', (e) => { e.stopPropagation(); sharePost(post); });
   waBtn.addEventListener('click', (e) => { e.stopPropagation(); shareToWhatsApp(post); });
 
@@ -243,10 +300,20 @@ function renderPostCard(post, { isHot = false, myVotes, myUid }) {
 }
 
 function renderPoll(box, data, post, card) {
-  if (!box || !data) return;
+  if (!box) return;
   box.innerHTML = '';
 
+  if (!data) {
+    box.appendChild(el('div', { class: 'poll--fallback' }, 'Tap to view poll'));
+    return;
+  }
+
   const options = data.options || [];
+  if (!options.length) {
+    box.appendChild(el('div', { class: 'poll--empty' }, 'No options yet'));
+    return;
+  }
+
   const total = data.total_votes || 0;
   const mine = data.my_option_id;
   const closed = data.closed;
@@ -269,7 +336,8 @@ function renderPoll(box, data, post, card) {
     for (const opt of options) {
       const row = document.getElementById('tpl-poll-option-vote').content.firstElementChild.cloneNode(true);
       row.querySelector('.poll-option__label').textContent = opt.label;
-      row.addEventListener('click', async () => {
+      row.addEventListener('click', async (e) => {
+        e.stopPropagation();
         if (!api.isAuthed()) return window.__anon.openSignup();
         try {
           await api.votePoll(post.id, opt.option_id);

@@ -36,6 +36,8 @@ export async function mount(root, params) {
   const built = buildPostCard(post);
   postBox.appendChild(built.card);
 
+  const reachTimer = startPostPolling(built.card, post.id);
+
   let parentId = null;
   let renderedCount = 0;
 
@@ -123,7 +125,66 @@ export async function mount(root, params) {
     }
   });
 
-  return () => clearInterval(liveTimer);
+  return () => { clearInterval(liveTimer); clearInterval(reachTimer); };
+}
+
+function updateReachDisplay(stats, reach, { animate = false } = {}) {
+  if (!stats) return;
+  const wasZero = Number(stats.dataset.reach || 0) === 0;
+  stats.hidden = reach === 0;
+  stats.classList.remove('post-card__reach--quiet', 'post-card__reach--warm', 'post-card__reach--hot');
+  const cls = reachClass(reach);
+  if (cls) stats.classList.add(cls);
+  const icon = stats.querySelector('.post-card__reach-icon use');
+  if (icon) icon.setAttribute('href', reach >= 500 ? '#i-flame' : '#i-eye');
+  const reachEl = stats.querySelector('.post-card__reach');
+  if (reachEl) {
+    reachEl.textContent = formatReach(reach);
+    if (animate && !wasZero) bumpEl(reachEl, 'post-card__reach--bump');
+  }
+  stats.dataset.reach = String(reach);
+}
+
+function bumpEl(node, className) {
+  if (!node) return;
+  node.classList.remove(className);
+  void node.offsetWidth;
+  node.classList.add(className);
+}
+
+function startPostPolling(card, postId) {
+  return setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const counts = await api.getPostCounts([postId]);
+      const c = counts[postId];
+      if (!c) return;
+
+      const stats = card.querySelector('.post-card__stats');
+      if (stats) {
+        const current = Number(stats.dataset.reach || 0);
+        if (c.view > current) updateReachDisplay(stats, c.view, { animate: true });
+      }
+
+      const voteCount = card.querySelector('[data-action="vote"] .post-card__count');
+      if (voteCount) {
+        const cur = Number(voteCount.textContent || 0);
+        if (c.upvote !== cur) {
+          voteCount.textContent = c.upvote;
+          if (c.upvote > cur) bumpEl(voteCount, 'count-bump');
+        }
+      }
+
+      const commentCount = card.querySelector('[data-action="open"] .post-card__count');
+      if (commentCount) {
+        const cur = Number(commentCount.textContent || 0);
+        if (c.comment > cur) {
+          commentCount.textContent = c.comment;
+          bumpEl(commentCount, 'count-bump');
+        }
+      }
+    } catch {}
+  }, 15000);
 }
 
 function buildPostCard(post) {
@@ -147,21 +208,10 @@ function buildPostCard(post) {
   if (teaser) teaser.remove();
 
   const stats = node.querySelector('.post-card__stats');
-  const reach = post.view_count || 0;
-  if (stats && reach > 0) {
-    stats.hidden = false;
-    const cls = reachClass(reach);
-    if (cls) stats.classList.add(cls);
-    const reachIcon = stats.querySelector('.post-card__reach-icon use');
-    if (reachIcon) {
-      reachIcon.setAttribute('href', reach >= 500 ? '#i-flame' : '#i-eye');
-    }
-    const reachEl = stats.querySelector('.post-card__reach');
-    if (reachEl) reachEl.textContent = formatReach(reach);
-  }
+  updateReachDisplay(stats, post.view_count || 0);
 
-  if (isPoll && post.poll_data) {
-    renderPoll(node.querySelector('[data-role="poll"]'), post.poll_data, post);
+  if (isPoll) {
+    renderPoll(node.querySelector('[data-role="poll"]'), post.poll_data, post, node);
   }
 
   const voteBtn = node.querySelector('[data-action="vote"]');
@@ -232,10 +282,21 @@ function buildPostCard(post) {
   return { card: node, commentCountEl: commentCount };
 }
 
-function renderPoll(box, data, post) {
-  if (!box || !data) return;
+function renderPoll(box, data, post, card) {
+  if (!box) return;
   box.innerHTML = '';
+
+  if (!data) {
+    box.appendChild(el('div', { class: 'poll--fallback' }, 'Loading poll options…'));
+    return;
+  }
+
   const options = data.options || [];
+  if (!options.length) {
+    box.appendChild(el('div', { class: 'poll--empty' }, 'No options yet'));
+    return;
+  }
+
   const total = data.total_votes || 0;
   const mine = data.my_option_id;
   const closed = data.closed;
@@ -264,7 +325,7 @@ function renderPoll(box, data, post) {
           await api.votePoll(post.id, opt.option_id);
           haptic(6);
           const fresh = await api.getPollResults(post.id);
-          if (fresh) renderPoll(box, fresh, post);
+          if (fresh) renderPoll(box, fresh, post, card);
         } catch { toast('Vote failed.'); }
       });
       box.appendChild(row);

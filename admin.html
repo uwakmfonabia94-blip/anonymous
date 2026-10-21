@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Admin — Anonymous</title>
+  <style>
+    :root {
+      --bg: #0E0E14;
+      --surface: #17171F;
+      --elevated: #1F1F2B;
+      --border: rgba(255,255,255,0.08);
+      --text: #F5F5F7;
+      --text-muted: #9A9AA8;
+      --primary: #8B5CF6;
+      --like: #34D399;
+      --alert: #F59E0B;
+      --radius: 12px;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--primary); text-decoration: none; }
+    button {
+      font: inherit; cursor: pointer;
+      background: var(--elevated);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      transition: background 0.15s, transform 0.1s;
+    }
+    button:hover { background: rgba(255,255,255,0.08); }
+    button:active { transform: scale(0.97); }
+    button:disabled { opacity: 0.4; pointer-events: none; }
+    button.danger { color: var(--alert); border-color: rgba(245,158,11,0.35); }
+    input {
+      font: inherit;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 16px;
+      width: 100%;
+    }
+    input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(139,92,246,0.2); }
+
+    /* Login */
+    #login-view {
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    #login-form {
+      width: 100%; max-width: 320px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    #login-form h1 { margin: 0 0 8px; font-size: 20px; font-weight: 700; }
+    #login-error { margin: 0; color: var(--alert); font-size: 13px; text-align: center; }
+
+    /* Dashboard */
+    #dashboard-view { padding: 24px; max-width: 1280px; margin: 0 auto; }
+    #dashboard-view > header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 24px;
+    }
+    #dashboard-view > header h1 { font-size: 20px; font-weight: 700; margin: 0; }
+    #dashboard-view > header > div { display: flex; gap: 8px; }
+
+    section { margin-bottom: 32px; }
+    section h2 {
+      font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-muted); margin: 0 0 12px;
+    }
+
+    /* KPI */
+    #kpi-row {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 12px; margin-bottom: 24px;
+    }
+    .kpi-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px;
+    }
+    .kpi-card__label {
+      font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-muted); margin-bottom: 6px;
+    }
+    .kpi-card__value { font-size: 28px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+    .kpi-card--alert .kpi-card__value { color: var(--alert); }
+
+    /* Charts */
+    .chart-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px; min-height: 180px;
+    }
+    .chart-legend { display: flex; gap: 16px; margin-bottom: 8px; font-size: 12px; color: var(--text-muted); }
+    .chart-legend span::before {
+      content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+      margin-right: 6px; vertical-align: middle;
+    }
+    .chart-legend .legend-dau::before { background: #8B5CF6; }
+    .chart-legend .legend-posts::before { background: #34D399; }
+    .chart-legend .legend-comments::before { background: #22D3EE; }
+
+    /* Tables */
+    .table-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    th {
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-muted); background: rgba(255,255,255,0.02);
+    }
+    tr:last-child td { border-bottom: 0; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+    td.content {
+      max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    td.actions { text-align: right; white-space: nowrap; }
+    td.actions button { padding: 4px 10px; font-size: 12px; margin-left: 4px; }
+    .empty {
+      padding: 32px 16px; text-align: center;
+      color: var(--text-muted); font-size: 13px;
+    }
+
+    #status {
+      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      background: var(--elevated); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 14px; font-size: 12px;
+      opacity: 0; pointer-events: none; transition: opacity 0.2s;
+      z-index: 10;
+    }
+    #status.visible { opacity: 1; }
+
+    @media (max-width: 720px) {
+      #kpi-row { grid-template-columns: repeat(2, 1fr); }
+      #dashboard-view { padding: 16px; }
+      td.content { max-width: 180px; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="login-view">
+  <form id="login-form" autocomplete="off">
+    <h1>Anonymous · Admin</h1>
+    <input id="password" type="password" placeholder="Password" required autofocus>
+    <button type="submit">Enter</button>
+    <p id="login-error" hidden>Wrong password</p>
+  </form>
+</div>
+
+<div id="dashboard-view" hidden>
+  <header>
+    <h1>Anonymous · Admin</h1>
+    <div>
+      <button id="refresh-btn" type="button">Refresh</button>
+      <button id="logout-btn" type="button">Log out</button>
+    </div>
+  </header>
+
+  <section id="kpi-row"></section>
+
+  <section>
+    <h2>DAU — last 30 days</h2>
+    <div class="chart-box">
+      <div class="chart-legend"><span class="legend-dau">Daily active users</span></div>
+      <div id="dau-chart"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Volume — last 30 days</h2>
+    <div class="chart-box">
+      <div class="chart-legend">
+        <span class="legend-posts">Posts</span>
+        <span class="legend-comments">Comments</span>
+      </div>
+      <div id="volume-chart"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Moderation queue</h2>
+    <div class="table-wrap" id="reports-box"></div>
+  </section>
+
+  <section>
+    <h2>Recent posts — last 24h</h2>
+    <div class="table-wrap" id="recent-box"></div>
+  </section>
+
+  <section>
+    <h2>Top 10 this week — for Best of Campus</h2>
+    <div class="table-wrap" id="top-box"></div>
+  </section>
+</div>
+
+<div id="status"></div>
+
+<script>
+const SESSION_KEY = 'admin.token';
+let currentToken = null;
+
+const loginView     = document.getElementById('login-view');
+const dashboardView = document.getElementById('dashboard-view');
+const loginForm     = document.getElementById('login-form');
+const loginError    = document.getElementById('login-error');
+const passwordInput = document.getElementById('password');
+const statusEl      = document.getElementById('status');
+const refreshBtn    = document.getElementById('refresh-btn');
+const logoutBtn     = document.getElementById('logout-btn');
+
+function showStatus(msg) {
+  statusEl.textContent = msg;
+  statusEl.classList.add('visible');
+  clearTimeout(showStatus._t);
+  showStatus._t = setTimeout(() => statusEl.classList.remove('visible'), 2200);
+}
+
+async function api(action, extra = {}) {
+  const res = await fetch('/api/admin', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action, token: currentToken, ...extra }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `http_${res.status}`);
+  return data;
+}
+
+// ---------- Login ----------
+
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  loginError.hidden = true;
+  const pw = passwordInput.value;
+  try {
+    const res = await fetch('/api/admin', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'login', password: pw }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (data.error === 'wrong_password') loginError.hidden = false;
+      else showStatus('Login failed: ' + (data.error || res.status));
+      return;
+    }
+    currentToken = data.token;
+    sessionStorage.setItem(SESSION_KEY, data.token);
+    passwordInput.value = '';
+    await loadDashboard();
+  } catch (err) {
+    showStatus('Network error: ' + err.message);
+  }
+});
+
+// ---------- Dashboard ----------
+
+async function loadDashboard() {
+  try {
+    const data = await api('dashboard');
+    loginView.hidden = true;
+    dashboardView.hidden = false;
+    renderAll(data);
+  } catch (err) {
+    if (String(err.message).includes('unauthorized')) {
+      sessionStorage.removeItem(SESSION_KEY);
+      currentToken = null;
+      dashboardView.hidden = true;
+      loginView.hidden = false;
+      showStatus('Session expired');
+    } else {
+      showStatus('Load failed: ' + err.message);
+    }
+  }
+}
+
+async function refresh() {
+  refreshBtn.disabled = true;
+  try {
+    await loadDashboard();
+    showStatus('Refreshed');
+  } catch (err) {
+    showStatus('Refresh failed: ' + err.message);
+  } finally {
+    refreshBtn.disabled = false;
+  }
+}
+
+refreshBtn.addEventListener('click', refresh);
+
+logoutBtn.addEventListener('click', () => {
+  sessionStorage.removeItem(SESSION_KEY);
+  currentToken = null;
+  dashboardView.hidden = true;
+  loginView.hidden = false;
+  passwordInput.focus();
+});
+
+// ---------- Renderers ----------
+
+function renderAll(data) {
+  renderKPI(data.kpi);
+  renderChart(document.getElementById('dau-chart'), [
+    { label: 'DAU', color: '#8B5CF6', data: data.dau_series || [] },
+  ]);
+  renderChart(document.getElementById('volume-chart'), [
+    { label: 'Posts', color: '#34D399', data: data.volume_posts || [] },
+    { label: 'Comments', color: '#22D3EE', data: data.volume_comments || [] },
+  ]);
+  renderReports(data.reports || []);
+  renderRecent(data.recent_posts || []);
+  renderTop(data.top_week || []);
+}
+
+function renderKPI(kpi) {
+  const el = document.getElementById('kpi-row');
+  if (!kpi) { el.innerHTML = ''; return; }
+  const cells = [
+    { label: 'DAU', value: kpi.dau ?? 0 },
+    { label: 'New users (24h)', value: kpi.new_users ?? 0 },
+    { label: 'Posts (24h)', value: kpi.posts_today ?? 0 },
+    { label: 'Open reports', value: kpi.open_reports ?? 0, alert: (kpi.open_reports || 0) > 0 },
+  ];
+  el.innerHTML = cells.map(c => `
+    <div class="kpi-card${c.alert ? ' kpi-card--alert' : ''}">
+      <div class="kpi-card__label">${c.label}</div>
+      <div class="kpi-card__value">${c.value}</div>
+    </div>
+  `).join('');
+}
+
+function renderChart(container, series) {
+  const hasData = series.some(s => s.data && s.data.length);
+  if (!hasData) { container.innerHTML = '<p class="empty">No data yet</p>'; return; }
+
+  const W = container.clientWidth || 700;
+  const H = 180;
+  const pad = { t: 16, r: 16, b: 28, l: 36 };
+  const iw = W - pad.l - pad.r;
+  const ih = H - pad.t - pad.b;
+
+  const allValues = series.flatMap(s => (s.data || []).map(d => d.value || 0));
+  const maxVal = Math.max(1, ...allValues);
+  const n = Math.max(...series.map(s => (s.data || []).length));
+
+  const x = i => pad.l + (n === 1 ? iw / 2 : (i / (n - 1)) * iw);
+  const y = v => pad.t + ih - (v / maxVal) * ih;
+
+  const paths = series.map(s => {
+    const pts = (s.data || []).map((pt, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(pt.value || 0).toFixed(1)}`);
+    if (!pts.length) return '';
+    return `<path d="${pts.join(' ')}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />`;
+  }).join('');
+
+  const grid = [0, 0.5, 1].map(f => {
+    const yy = pad.t + ih - f * ih;
+    return `<line x1="${pad.l}" x2="${pad.l + iw}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,0.06)" stroke-width="1" />`;
+  }).join('');
+
+  const yLabels = [0, Math.round(maxVal / 2), maxVal].map(v => {
+    const yy = y(v);
+    return `<text x="${pad.l - 8}" y="${yy + 4}" font-size="10" fill="#9A9AA8" text-anchor="end">${v}</text>`;
+  }).join('');
+
+  const mainSeries = series.find(s => s.data && s.data.length);
+  const xLabels = (mainSeries?.data || [])
+    .map((pt, i) => ({ pt, i }))
+    .filter(({ i }) => i % 7 === 0 || i === n - 1)
+    .map(({ pt, i }) => {
+      const label = (pt.day || '').slice(5);
+      return `<text x="${x(i).toFixed(1)}" y="${pad.t + ih + 16}" font-size="10" fill="#9A9AA8" text-anchor="middle">${label}</text>`;
+    }).join('');
+
+  container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block">${grid}${paths}${yLabels}${xLabels}</svg>`;
+}
+
+function renderReports(reports) {
+  const box = document.getElementById('reports-box');
+  if (!reports.length) { box.innerHTML = '<p class="empty">No open reports.</p>'; return; }
+  const rows = reports.map(r => `
+    <tr>
+      <td><strong>${escapeHtml(r.reason)}</strong></td>
+      <td class="content" title="${escapeHtml(r.post_content || '')}">${escapeHtml(r.post_content || '(post deleted)')}</td>
+      <td>${escapeHtml(r.post_author || '—')}</td>
+      <td class="num">${relativeTime(r.created_at)}</td>
+      <td class="actions">
+        ${r.post_id ? `<button type="button" class="danger" data-action="delete-post" data-post-id="${escapeHtml(r.post_id)}">Delete post</button>` : ''}
+        <button type="button" data-action="resolve-report" data-report-id="${escapeHtml(r.id)}">Resolve</button>
+      </td>
+    </tr>
+  `).join('');
+  box.innerHTML = `
+    <table>
+      <thead><tr><th>Reason</th><th>Post</th><th>Author</th><th>When</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function renderRecent(posts) {
+  const box = document.getElementById('recent-box');
+  if (!posts.length) { box.innerHTML = '<p class="empty">No posts in the last 24 hours.</p>'; return; }
+  const rows = posts.map(p => `
+    <tr>
+      <td class="content" title="${escapeHtml(p.content || '')}">${escapeHtml(p.content || '(no text)')}</td>
+      <td>${escapeHtml(p.type || 'text')}</td>
+      <td>${escapeHtml(p.author_alias || '—')}</td>
+      <td class="num">${p.upvotes ?? 0}</td>
+      <td class="num">${p.comments ?? 0}</td>
+      <td class="num">${p.views ?? 0}</td>
+      <td class="actions">
+        <button type="button" data-action="copy-id" data-post-id="${escapeHtml(p.id)}">Copy ID</button>
+        <button type="button" class="danger" data-action="delete-post" data-post-id="${escapeHtml(p.id)}">Delete</button>
+      </td>
+    </tr>
+  `).join('');
+  box.innerHTML = `
+    <table>
+      <thead><tr><th>Content</th><th>Type</th><th>Author</th><th>♡</th><th>💬</th><th>👁</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function renderTop(posts) {
+  const box = document.getElementById('top-box');
+  if (!posts.length) { box.innerHTML = '<p class="empty">No posts this week.</p>'; return; }
+  const rows = posts.map((p, i) => `
+    <tr>
+      <td><strong>#${i + 1}</strong></td>
+      <td class="content" title="${escapeHtml(p.content || '')}">${escapeHtml(p.content || '(no text)')}</td>
+      <td>${escapeHtml(p.author_alias || '—')}</td>
+      <td class="num">${p.upvotes ?? 0}</td>
+      <td class="num">${p.comments ?? 0}</td>
+      <td class="num">${p.views ?? 0}</td>
+      <td class="actions">
+        <button type="button" data-action="copy-id" data-post-id="${escapeHtml(p.id)}">Copy ID</button>
+        <button type="button" class="danger" data-action="delete-post" data-post-id="${escapeHtml(p.id)}">Delete</button>
+      </td>
+    </tr>
+  `).join('');
+  box.innerHTML = `
+    <table>
+      <thead><tr><th>Rank</th><th>Content</th><th>Author</th><th>♡</th><th>💬</th><th>👁</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+// ---------- Actions ----------
+
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+
+  if (action === 'delete-post') {
+    const postId = btn.dataset.postId;
+    if (!postId) return;
+    if (!confirm('Delete this post permanently?\n\nNote: storage files (photos) will remain in the bucket and must be cleaned up manually.')) return;
+    btn.disabled = true;
+    try {
+      await api('delete_post', { postId });
+      showStatus('Post deleted');
+      await refresh();
+    } catch (err) {
+      showStatus('Delete failed: ' + err.message);
+      btn.disabled = false;
+    }
+  }
+
+  if (action === 'resolve-report') {
+    const reportId = btn.dataset.reportId;
+    if (!reportId) return;
+    btn.disabled = true;
+    try {
+      await api('resolve_report', { reportId });
+      showStatus('Report resolved');
+      await refresh();
+    } catch (err) {
+      showStatus('Resolve failed: ' + err.message);
+      btn.disabled = false;
+    }
+  }
+
+  if (action === 'copy-id') {
+    const postId = btn.dataset.postId;
+    if (!postId) return;
+    try {
+      await navigator.clipboard.writeText(postId);
+      showStatus('Post ID copied');
+    } catch { showStatus('Copy failed'); }
+  }
+});
+
+// ---------- Helpers ----------
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function relativeTime(iso) {
+  if (!iso) return '—';
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return 'now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+// ---------- Session restore on page load ----------
+
+(function init() {
+  const saved = sessionStorage.getItem(SESSION_KEY);
+  if (saved) {
+    currentToken = saved;
+    loadDashboard();
+  }
+})();
+</script>
+</body>
+</html>

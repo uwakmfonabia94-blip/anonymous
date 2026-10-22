@@ -14,18 +14,23 @@
       --text: #F5EFE6;
       --text-muted: #A89986;
       --primary: #F59E0B;
-      --like: #EF4444;
+      --like: #34D399;
       --alert: #DC2626;
       --radius: 12px;
       color-scheme: dark;
     }
-    * { box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; }
+
+    /* CRITICAL: ensures [hidden] wins over any display rule */
+    [hidden] { display: none !important; }
+
     body {
       margin: 0;
       background: var(--bg);
       color: var(--text);
       font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
     }
     a { color: var(--primary); text-decoration: none; }
     button {
@@ -35,6 +40,7 @@
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 8px 14px;
+      min-height: 36px;
       transition: background 0.15s, transform 0.1s;
     }
     button:hover { background: rgba(255,240,220,0.08); }
@@ -42,15 +48,17 @@
     button:disabled { opacity: 0.4; pointer-events: none; }
     button.danger { color: var(--alert); border-color: rgba(220,38,38,0.4); }
 
-    /* State screens */
+    /* ---------- STATE SCREENS ---------- */
     .state-screen {
       min-height: 100dvh;
-      display: grid;
-      place-items: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       padding: 24px;
     }
     .state-card {
       max-width: 420px;
+      width: 100%;
       text-align: center;
       background: var(--surface);
       border: 1px solid var(--border);
@@ -59,96 +67,227 @@
     }
     .state-card h1 { font-size: 20px; margin: 0 0 12px; font-weight: 700; }
     .state-card p { color: var(--text-muted); margin: 0 0 16px; line-height: 1.55; }
-    .state-card .state-meta { color: var(--text); font-weight: 500; }
+    .state-card .state-meta { color: var(--text); font-weight: 500; margin-bottom: 20px; }
     .state-link {
       display: inline-block;
-      margin-top: 8px;
       padding: 10px 20px;
       background: var(--primary);
       color: #100E0C;
       border-radius: 8px;
       font-weight: 600;
+      min-height: 40px;
+      line-height: 20px;
     }
     .state-link:hover { opacity: 0.9; }
 
-    /* Dashboard */
-    #state-dashboard { padding: 24px; max-width: 1280px; margin: 0 auto; }
-    #state-dashboard > header {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+    /* ---------- DASHBOARD ---------- */
+    #state-dashboard {
+      padding: 24px;
+      max-width: 1280px;
+      margin: 0 auto;
     }
-    #state-dashboard > header h1 { font-size: 20px; font-weight: 700; margin: 0; }
-    #state-dashboard > header > div { display: flex; gap: 8px; align-items: center; }
+    #state-dashboard > header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    #state-dashboard > header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: -0.01em;
+    }
+    #state-dashboard > header > div {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
     .header-link {
       color: var(--text-muted);
       font-size: 13px;
+      padding: 8px 12px;
     }
     .header-link:hover { color: var(--text); }
 
     section { margin-bottom: 32px; }
     section h2 {
-      font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+      font-size: 13px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.08em;
       color: var(--text-muted); margin: 0 0 12px;
     }
 
+    /* ---------- KPI GRID ---------- */
     #kpi-row {
-      display: grid; grid-template-columns: repeat(4, 1fr);
-      gap: 12px; margin-bottom: 24px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
     }
     .kpi-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
     }
     .kpi-card__label {
-      font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em;
-      color: var(--text-muted); margin-bottom: 6px;
+      font-size: 11px; font-weight: 500;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
     }
-    .kpi-card__value { font-size: 28px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+    .kpi-card__label .window {
+      font-size: 10px;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--text-muted);
+      opacity: 0.7;
+      font-weight: 400;
+    }
+    .kpi-card__value {
+      font-size: 26px; font-weight: 700; line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
     .kpi-card--alert .kpi-card__value { color: var(--alert); }
-
-    .chart-box {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 16px; min-height: 180px;
+    .kpi-card--live .kpi-card__label::before {
+      content: "";
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--like);
+      display: inline-block;
+      animation: live-pulse 2s ease-in-out infinite;
     }
-    .chart-legend { display: flex; gap: 16px; margin-bottom: 8px; font-size: 12px; color: var(--text-muted); }
+    @keyframes live-pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: 0.4; }
+    }
+
+    /* ---------- CHARTS ---------- */
+    .chart-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      min-height: 180px;
+    }
+    .chart-legend {
+      display: flex; flex-wrap: wrap; gap: 12px;
+      margin-bottom: 8px; font-size: 12px; color: var(--text-muted);
+    }
     .chart-legend span::before {
-      content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px;
-      margin-right: 6px; vertical-align: middle;
+      content: "";
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 2px;
+      margin-right: 6px;
+      vertical-align: middle;
     }
     .chart-legend .legend-dau::before { background: var(--primary); }
-    .chart-legend .legend-posts::before { background: #34D399; }
+    .chart-legend .legend-posts::before { background: var(--like); }
     .chart-legend .legend-comments::before { background: #22D3EE; }
 
+    /* ---------- TABLES ---------- */
     .table-wrap {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      min-width: 560px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
     th {
-      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
-      color: var(--text-muted); background: rgba(255,240,220,0.02);
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-muted);
+      background: rgba(255,240,220,0.02);
+      white-space: nowrap;
     }
     tr:last-child td { border-bottom: 0; }
-    td.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-muted); }
-    td.content { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    td.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    td.content {
+      max-width: 420px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     td.actions { text-align: right; white-space: nowrap; }
-    td.actions button { padding: 4px 10px; font-size: 12px; margin-left: 4px; }
-    .empty { padding: 32px 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
+    td.actions button {
+      padding: 4px 10px;
+      font-size: 12px;
+      margin-left: 4px;
+      min-height: 28px;
+    }
+    .empty {
+      padding: 32px 16px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
 
+    /* ---------- TOAST ---------- */
     #status {
-      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-      background: var(--elevated); border: 1px solid var(--border);
-      border-radius: 8px; padding: 8px 14px; font-size: 12px;
-      opacity: 0; pointer-events: none; transition: opacity 0.2s;
+      position: fixed;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--elevated);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 12px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
       z-index: 10;
+      max-width: calc(100vw - 32px);
     }
     #status.visible { opacity: 1; }
 
+    /* ---------- MOBILE ---------- */
     @media (max-width: 720px) {
-      #kpi-row { grid-template-columns: repeat(2, 1fr); }
       #state-dashboard { padding: 16px; }
-      td.content { max-width: 180px; }
+      #state-dashboard > header h1 { font-size: 18px; }
+      #state-dashboard > header { gap: 8px; margin-bottom: 20px; }
+      #kpi-row { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .kpi-card { padding: 12px 14px; }
+      .kpi-card__value { font-size: 22px; }
+      section { margin-bottom: 24px; }
+      .chart-box { padding: 12px; min-height: 160px; }
+      td.content { max-width: 220px; }
+      .state-card { padding: 24px 20px; }
+    }
+    @media (max-width: 380px) {
+      .kpi-card__value { font-size: 20px; }
+      #state-dashboard { padding: 12px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
     }
   </style>
 </head>
@@ -245,6 +384,8 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from '/js/config.js';
 const SESSION_KEY = 'anon.session';
 const STATES = ['state-loading','state-not-logged-in','state-session-expired','state-not-admin','state-error','state-dashboard'];
 
+let kpiPollTimer = null;
+
 function getSession() {
   try { const r = localStorage.getItem(SESSION_KEY); return r ? JSON.parse(r) : null; }
   catch { return null; }
@@ -252,6 +393,10 @@ function getSession() {
 
 function showState(name) {
   STATES.forEach(s => { document.getElementById(s).hidden = (s !== name); });
+  if (name !== 'state-dashboard' && kpiPollTimer) {
+    clearInterval(kpiPollTimer);
+    kpiPollTimer = null;
+  }
 }
 
 function showStatus(msg) {
@@ -293,11 +438,11 @@ async function boot() {
     const data = await callRpc('admin_dashboard');
     showState('state-dashboard');
     renderAll(data);
+    startKpiPolling();
   } catch (err) {
     const msg = String(err.message);
 
     if (msg.includes('unauthorized')) {
-      // Fetch their alias so we can show who they're logged in as
       try {
         const meRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${session.user_id}&select=alias`, {
           headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` },
@@ -315,6 +460,22 @@ async function boot() {
       showState('state-error');
     }
   }
+}
+
+function startKpiPolling() {
+  if (kpiPollTimer) clearInterval(kpiPollTimer);
+  kpiPollTimer = setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const kpi = await callRpc('admin_kpis');
+      if (kpi) renderKPI(kpi);
+    } catch (e) {
+      if (String(e.message).includes('unauthorized') || String(e.message).includes('JWT')) {
+        clearInterval(kpiPollTimer);
+        kpiPollTimer = null;
+      }
+    }
+  }, 30000);
 }
 
 function renderAll(data) {
@@ -335,14 +496,16 @@ function renderKPI(kpi) {
   const el = document.getElementById('kpi-row');
   if (!kpi) { el.innerHTML = ''; return; }
   const cells = [
-    { label: 'DAU', value: kpi.dau ?? 0 },
-    { label: 'New users (24h)', value: kpi.new_users ?? 0 },
-    { label: 'Posts (24h)', value: kpi.posts_today ?? 0 },
-    { label: 'Open reports', value: kpi.open_reports ?? 0, alert: (kpi.open_reports || 0) > 0 },
+    { label: 'Active now', window: '5m', value: kpi.active_now ?? 0, live: true },
+    { label: 'DAU', window: '24h', value: kpi.dau ?? 0 },
+    { label: 'New users', window: '24h', value: kpi.new_users ?? 0 },
+    { label: 'Total users', window: 'all time', value: kpi.total_users ?? 0 },
+    { label: 'Posts', window: '24h', value: kpi.posts_today ?? 0 },
+    { label: 'Open reports', window: '', value: kpi.open_reports ?? 0, alert: (kpi.open_reports || 0) > 0 },
   ];
   el.innerHTML = cells.map(c => `
-    <div class="kpi-card${c.alert ? ' kpi-card--alert' : ''}">
-      <div class="kpi-card__label">${c.label}</div>
+    <div class="kpi-card${c.alert ? ' kpi-card--alert' : ''}${c.live ? ' kpi-card--live' : ''}">
+      <div class="kpi-card__label">${c.label}${c.window ? ` <span class="window">· ${c.window}</span>` : ''}</div>
       <div class="kpi-card__value">${c.value}</div>
     </div>
   `).join('');
@@ -353,8 +516,9 @@ function renderChart(container, series) {
   if (!hasData) { container.innerHTML = '<p class="empty">No data yet</p>'; return; }
 
   const W = container.clientWidth || 700;
-  const H = 180;
-  const pad = { t: 16, r: 16, b: 28, l: 36 };
+  const isMobile = W < 500;
+  const H = isMobile ? 150 : 180;
+  const pad = { t: 16, r: 12, b: 24, l: isMobile ? 28 : 36 };
   const iw = W - pad.l - pad.r;
   const ih = H - pad.t - pad.b;
 
@@ -378,16 +542,16 @@ function renderChart(container, series) {
 
   const yLabels = [0, Math.round(maxVal / 2), maxVal].map(v => {
     const yy = y(v);
-    return `<text x="${pad.l - 8}" y="${yy + 4}" font-size="10" fill="#A89986" text-anchor="end">${v}</text>`;
+    return `<text x="${pad.l - 6}" y="${yy + 4}" font-size="10" fill="#A89986" text-anchor="end">${v}</text>`;
   }).join('');
 
   const mainSeries = series.find(s => s.data && s.data.length);
   const xLabels = (mainSeries?.data || [])
     .map((pt, i) => ({ pt, i }))
-    .filter(({ i }) => i % 7 === 0 || i === n - 1)
+    .filter(({ i }) => (isMobile ? i % 10 === 0 : i % 7 === 0) || i === n - 1)
     .map(({ pt, i }) => {
       const label = (pt.day || '').slice(5);
-      return `<text x="${x(i).toFixed(1)}" y="${pad.t + ih + 16}" font-size="10" fill="#A89986" text-anchor="middle">${label}</text>`;
+      return `<text x="${x(i).toFixed(1)}" y="${pad.t + ih + 14}" font-size="10" fill="#A89986" text-anchor="middle">${label}</text>`;
     }).join('');
 
   container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block">${grid}${paths}${yLabels}${xLabels}</svg>`;

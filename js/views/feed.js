@@ -3,6 +3,18 @@ import { timeAgo, renderAvatar, el, toast, sharePost, shareToWhatsApp, haptic,
          formatReach, reachClass, openSheet, closeSheet } from '../ui.js';
 import { buildMediaUrl, buildViewerWatermark } from '../media.js';
 
+// ---------- CONSTANTS ----------
+
+const DAILY_PROMPTS = {
+  0: { label: 'Sunday', text: "What's the best thing that happened this week?" },
+  1: { label: 'Confession Monday', text: "Say something you've never told anyone." },
+  2: { label: 'Tuesday question', text: "What's the weirdest thing that happened today?" },
+  3: { label: 'Rant Wednesday', text: "What's grinding your gears right now?" },
+  4: { label: 'Thursday prompt', text: "Ask the campus a question you've been holding in." },
+  5: { label: 'Confession Friday', text: "What's on your mind this weekend?" },
+  6: { label: 'Saturday', text: "What's something small that made you smile today?" },
+};
+
 const SPICE_PROMPTS = [
   { badge: 'Question of the day', text: "What's the worst advice you've ever gotten?" },
   { badge: 'Campus prompt',       text: "Post about a professor who deserves an award." },
@@ -14,6 +26,8 @@ const SPICE_PROMPTS = [
 
 const VIEWED_KEY = 'anon.viewedPosts';
 
+// ---------- HELPERS ----------
+
 function getViewedSet() {
   try { return new Set(JSON.parse(sessionStorage.getItem(VIEWED_KEY) || '[]')); }
   catch { return new Set(); }
@@ -24,6 +38,38 @@ function markViewed(postId) {
   sessionStorage.setItem(VIEWED_KEY, JSON.stringify([...set]));
 }
 
+function getDailyPrompt() {
+  return DAILY_PROMPTS[new Date().getDay()];
+}
+
+function presenceText(count) {
+  if (count == null || count < 5) return null;
+  if (count < 10) return 'A few students here';
+  if (count < 100) return `${count} students here now`;
+  return '100+ students here now';
+}
+
+function classifyPost(post, myUid) {
+  const classes = [];
+  if (post.media && post.media.length > 0) {
+    classes.push('post-card--photo');
+  } else if (post.content) {
+    const trimmed = post.content.trim();
+    const isQuote = trimmed.length > 10 && (
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+      (trimmed.startsWith('\u201C') && trimmed.endsWith('\u201D'))
+    );
+    if (isQuote) classes.push('post-card--quote');
+    else if (trimmed.length > 200) classes.push('post-card--long');
+    else if (trimmed.length < 100) classes.push('post-card--short');
+  }
+  if (myUid && myUid === post.author_id) classes.push('post-card--mine');
+  return classes;
+}
+
+// ---------- MOUNT ----------
+
 export async function mount(root) {
   root.innerHTML = '';
   const screen = document.getElementById('tpl-feed-screen').content.firstElementChild.cloneNode(true);
@@ -31,6 +77,14 @@ export async function mount(root) {
 
   const feed     = screen.querySelector('[data-role="feed"]');
   const sentinel = screen.querySelector('[data-role="sentinel"]');
+  const pinBanner = screen.querySelector('.pin-banner');
+
+  // --- Update pinned prompt with today's theme ---
+  const dailyPrompt = getDailyPrompt();
+  if (pinBanner) {
+    pinBanner.querySelector('.pin-banner__label').textContent = dailyPrompt.label;
+    pinBanner.querySelector('.pin-banner__text').textContent = dailyPrompt.text;
+  }
 
   const justPostedId = sessionStorage.getItem('anon.justPosted');
   sessionStorage.removeItem('anon.justPosted');
@@ -38,6 +92,9 @@ export async function mount(root) {
   let viewerAlias = api.getCachedAlias();
   if (!viewerAlias && api.isAuthed()) viewerAlias = await api.ensureAliasCached().catch(() => null);
   const watermark = buildViewerWatermark(viewerAlias);
+
+  // --- Presence banner (before feed loads, so layout is ready) ---
+  const presenceLoop = startPresenceLoop(screen, pinBanner);
 
   const skeletonTpl = document.getElementById('tpl-skeleton-card');
   for (let i = 0; i < 3; i++) feed.appendChild(skeletonTpl.content.firstElementChild.cloneNode(true));
@@ -55,7 +112,7 @@ export async function mount(root) {
     console.error('[feed] load failed:', err);
     feed.innerHTML = '';
     feed.appendChild(el('p', { class: 'empty-state__text' }, 'Could not load feed. Pull down to retry.'));
-    return;
+    return () => { if (presenceLoop.interval) clearInterval(presenceLoop.interval); };
   }
 
   feed.innerHTML = '';
@@ -64,7 +121,10 @@ export async function mount(root) {
 
   if (!posts.length) {
     feed.appendChild(document.getElementById('tpl-empty').content.firstElementChild.cloneNode(true));
-    return () => clearInterval(newPostsBar.interval);
+    return () => {
+      clearInterval(newPostsBar.interval);
+      if (presenceLoop.interval) clearInterval(presenceLoop.interval);
+    };
   }
 
   let myVotes = new Set();
@@ -120,6 +180,7 @@ export async function mount(root) {
     const labels = { now: 'Just now', today: 'Today', yesterday: 'Yesterday', earlier: 'Earlier' };
     const node = document.getElementById('tpl-section-header').content.firstElementChild.cloneNode(true);
     node.textContent = labels[group];
+    node.dataset.section = group;
     feed.appendChild(node);
   };
 
@@ -176,8 +237,48 @@ export async function mount(root) {
     viewObserver.disconnect();
     clearInterval(newPostsBar.interval);
     clearInterval(reachTimer);
+    if (presenceLoop.interval) clearInterval(presenceLoop.interval);
   };
 }
+
+// ---------- PRESENCE ----------
+
+function startPresenceLoop(screen, pinBanner) {
+  const tpl = document.getElementById('tpl-presence-banner');
+  if (!tpl) return { interval: null };
+
+  const banner = tpl.content.firstElementChild.cloneNode(true);
+  const textEl = banner.querySelector('.presence-banner__text');
+
+  if (pinBanner && pinBanner.nextSibling) {
+    screen.insertBefore(banner, pinBanner.nextSibling);
+  } else if (pinBanner) {
+    screen.appendChild(banner);
+  } else {
+    const feed = screen.querySelector('[data-role="feed"]');
+    screen.insertBefore(banner, feed);
+  }
+
+  async function refresh() {
+    if (document.hidden) return;
+    if (!api.isAuthed()) return;
+    api.updatePresence().catch(() => {});
+    const count = await api.getActiveCount();
+    const text = presenceText(count);
+    if (text) {
+      banner.hidden = false;
+      textEl.textContent = text;
+    } else {
+      banner.hidden = true;
+    }
+  }
+
+  refresh();
+  const interval = setInterval(refresh, 30000);
+  return { interval };
+}
+
+// ---------- SECTION HEADERS ----------
 
 function sectionFor(dateStr) {
   const d = new Date(dateStr);
@@ -202,6 +303,8 @@ function renderSpiceCard(triggerAt) {
   });
   return card;
 }
+
+// ---------- REACH ----------
 
 function updateReachDisplay(stats, reach, { animate = false } = {}) {
   if (!stats) return;
@@ -262,6 +365,8 @@ function startReachPolling(feed) {
   }, 30000);
 }
 
+// ---------- MEDIA ----------
+
 function renderMediaGrid(container, media, watermark, onOpen) {
   if (!container || !media || !media.length) { if (container) container.remove(); return; }
   container.innerHTML = '';
@@ -321,11 +426,16 @@ function openLightbox(media, startIndex, watermark) {
   show();
 }
 
+// ---------- POST CARD ----------
+
 function renderPostCard(post, { isHot = false, myVotes, myUid, watermark }) {
   const isPoll = post.type === 'poll';
   const tplId = isPoll ? 'tpl-poll-card' : (isHot ? 'tpl-hot-post' : 'tpl-post-card');
   const card = document.getElementById(tplId).content.firstElementChild.cloneNode(true);
   card.dataset.postId = post.id;
+
+  // Apply classifier classes
+  classifyPost(post, myUid).forEach(c => card.classList.add(c));
 
   renderAvatar(card.querySelector('.avatar'), post.author_alias);
   card.querySelector('.post-card__alias').textContent = post.author_alias;
@@ -339,11 +449,8 @@ function renderPostCard(post, { isHot = false, myVotes, myUid, watermark }) {
   }
 
   const bodyEl = card.querySelector('.post-card__body');
-  if (post.content) {
-    bodyEl.textContent = post.content;
-  } else {
-    bodyEl.remove();
-  }
+  if (post.content) bodyEl.textContent = post.content;
+  else bodyEl.remove();
 
   const mediaWrap = card.querySelector('[data-role="media"]');
   if (post.media && post.media.length && mediaWrap) {
@@ -461,6 +568,8 @@ function renderPoll(box, data, post, card) {
   }
 }
 
+// ---------- MENU / REPORT ----------
+
 function openMoreMenu(post, card, myUid) {
   const node = document.getElementById('tpl-more-sheet').content.firstElementChild.cloneNode(true);
   const isMine = myUid && myUid === post.author_id;
@@ -501,6 +610,8 @@ function openReport(postId) {
   openSheet(node);
 }
 
+// ---------- RECAP ----------
+
 async function showRecapIfNeeded() {
   if (!api.isAuthed()) return;
   const lastVisit = localStorage.getItem('anon.lastVisit');
@@ -529,6 +640,8 @@ function presentRecapModal(recap) {
   });
   openSheet(node);
 }
+
+// ---------- NEW POSTS BAR ----------
 
 function mountNewPostsBar(screen) {
   const bar = document.getElementById('tpl-new-posts-bar').content.firstElementChild.cloneNode(true);

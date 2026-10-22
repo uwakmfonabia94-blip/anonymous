@@ -14,6 +14,25 @@ function markViewed(id) {
   sessionStorage.setItem(VIEWED_KEY, JSON.stringify([...s]));
 }
 
+function classifyPost(post, myUid) {
+  const classes = [];
+  if (post.media && post.media.length > 0) {
+    classes.push('post-card--photo');
+  } else if (post.content) {
+    const trimmed = post.content.trim();
+    const isQuote = trimmed.length > 10 && (
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+      (trimmed.startsWith('\u201C') && trimmed.endsWith('\u201D'))
+    );
+    if (isQuote) classes.push('post-card--quote');
+    else if (trimmed.length > 200) classes.push('post-card--long');
+    else if (trimmed.length < 100) classes.push('post-card--short');
+  }
+  if (myUid && myUid === post.author_id) classes.push('post-card--mine');
+  return classes;
+}
+
 export async function mount(root) {
   root.innerHTML = '';
   const screen = document.getElementById('tpl-discover').content.firstElementChild.cloneNode(true);
@@ -184,6 +203,8 @@ function renderCard(post, { myVotes, myUid, watermark }) {
   const tplId = isPoll ? 'tpl-poll-card' : 'tpl-post-card';
   const card = document.getElementById(tplId).content.firstElementChild.cloneNode(true);
   card.dataset.postId = post.id;
+
+  classifyPost(post, myUid).forEach(c => card.classList.add(c));
 
   renderAvatar(card.querySelector('.avatar'), post.author_alias);
   card.querySelector('.post-card__alias').textContent = post.author_alias;

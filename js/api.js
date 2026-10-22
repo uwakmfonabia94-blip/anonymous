@@ -73,8 +73,6 @@ export async function authFetch(path, opts = {}, retry = true) {
 const rpc     = (name, args) => publicFetch(`/rest/v1/rpc/${name}`, { method: 'POST', body: JSON.stringify(args) });
 const authRpc = (name, args) => authFetch(`/rest/v1/rpc/${name}`, { method: 'POST', body: JSON.stringify(args) });
 
-// Uses the user's token when authed — critical for auth.uid() inside SQL RPCs
-// (poll my_option_id, feed_posts media scoping, etc.). Falls back to anon.
 const rpcAuto = (name, args) => isAuthed() ? authRpc(name, args) : rpc(name, args);
 
 // ---------- AUTH ----------
@@ -147,6 +145,21 @@ export function getViewerKey() {
   return k;
 }
 
+// ---------- PRESENCE ----------
+
+export async function updatePresence() {
+  if (!isAuthed()) return;
+  try {
+    await authFetch('/rest/v1/rpc/update_presence', { method: 'POST', body: '{}' });
+  } catch {}
+}
+
+export async function getActiveCount() {
+  try {
+    return await publicFetch('/rest/v1/rpc/get_active_count', { method: 'POST', body: '{}' });
+  } catch { return 0; }
+}
+
 // ---------- FEED ----------
 
 export const listFeed = async ({ limit = 20, before = null, category = null } = {}) =>
@@ -191,7 +204,7 @@ export async function recordView(postId) {
   } catch { return 0; }
 }
 
-// ---------- POST COUNTS (polling for realtime updates) ----------
+// ---------- POST COUNTS ----------
 
 export async function getPostCounts(postIds) {
   if (!postIds?.length) return {};
@@ -331,7 +344,7 @@ export async function getPollResults(postId) {
   } catch { return null; }
 }
 
-// ---------- VOTES (likes) ----------
+// ---------- VOTES ----------
 
 export async function toggleVote(postId, currentlyVoted) {
   const uid = getSession().user_id;
@@ -466,8 +479,6 @@ export async function uploadMediaBlob(blob, path) {
       apikey: SUPABASE_ANON_KEY,
       Authorization: `Bearer ${s.access_token}`,
       'Content-Type': 'image/jpeg',
-      // x-upsert removed: path is unique per postId+position, so no collision possible.
-      // Upserting requires SELECT+UPDATE storage policies — we only have INSERT.
     },
     body: blob,
   });
@@ -505,7 +516,7 @@ export async function insertPostMedia({ postId, path, width, height, position })
   });
 }
 
-// ---------- ALIAS CACHE (for watermark) ----------
+// ---------- ALIAS CACHE ----------
 
 export function getCachedAlias() {
   const s = getSession();

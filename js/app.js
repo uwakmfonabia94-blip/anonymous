@@ -45,28 +45,15 @@ export function openSignup() {
 
     try {
       const inviteOk = await api.checkInviteCode(invite.value.trim());
-      if (!inviteOk) {
-        toast("That invite code didn't work.");
-        submit.disabled = false; submit.textContent = original;
-        return;
-      }
+      if (!inviteOk) { toast("That invite code didn't work."); submit.disabled = false; submit.textContent = original; return; }
       const aliasOk = await api.checkAliasAvailable(wantedAlias);
-      if (!aliasOk) {
-        toast('That name is taken or reserved. Try another.');
-        submit.disabled = false; submit.textContent = original;
-        return;
-      }
+      if (!aliasOk) { toast('That name is taken or reserved. Try another.'); submit.disabled = false; submit.textContent = original; return; }
 
-      await api.signUp({
-        alias: wantedAlias,
-        email: email.value.trim(),
-        password: pw.value,
-        inviteCode: invite.value.trim(),
-        agreed: agree.checked,
-      });
+      await api.signUp({ alias: wantedAlias, email: email.value.trim(), password: pw.value, inviteCode: invite.value.trim(), agreed: agree.checked });
       closeSheet();
       toast(`You're in, ${wantedAlias}.`);
       updateAuthUI();
+      refreshBadge();
       router.render();
     } catch (err) {
       const msg = String(err.message || err).toLowerCase();
@@ -113,6 +100,7 @@ export function openLogin() {
       closeSheet();
       toast('Welcome back.');
       updateAuthUI();
+      refreshBadge();
       router.render();
     } catch {
       toast('Incorrect email or password.');
@@ -130,12 +118,26 @@ export function updateAuthUI() {
 }
 
 async function refreshBadge() {
-  if (!api.isAuthed()) return;
+  const badge = document.getElementById('nav-badge');
+  const msgBadge = document.getElementById('msg-badge');
+  if (!api.isAuthed()) {
+    if (badge) badge.hidden = true;
+    if (msgBadge) msgBadge.hidden = true;
+    return;
+  }
   try {
-    const n = await api.getUnreadCount();
-    const badge = document.getElementById('nav-badge');
-    if (n > 0) { badge.textContent = n > 9 ? '9+' : n; badge.hidden = false; }
-    else badge.hidden = true;
+    const [activityN, messageN] = await Promise.all([
+      api.getUnreadCount().catch(() => 0),
+      api.getUnreadMessageCount().catch(() => 0),
+    ]);
+    if (badge) {
+      if (activityN > 0) { badge.textContent = activityN > 9 ? '9+' : activityN; badge.hidden = false; }
+      else badge.hidden = true;
+    }
+    if (msgBadge) {
+      if (messageN > 0) { msgBadge.textContent = messageN > 9 ? '9+' : messageN; msgBadge.hidden = false; }
+      else msgBadge.hidden = true;
+    }
   } catch {}
 }
 
@@ -152,13 +154,14 @@ document.addEventListener('click', (e) => {
   }
 });
 
-router.register('/',             async () => import('./views/feed.js'));
-router.register('/p/:id',        async () => import('./views/post.js'));
-router.register('/compose',      async () => import('./views/compose.js'));
-router.register('/activity',     async () => import('./views/activity.js'));
-router.register('/me',           async () => import('./views/me.js'));
-router.register('/discover',     async () => import('./views/discover.js'));
-router.register('/faq',          async () => import('./views/page.js'));
+router.register('/',                 async () => import('./views/feed.js'));
+router.register('/p/:id',            async () => import('./views/post.js'));
+router.register('/compose',          async () => import('./views/compose.js'));
+router.register('/activity',         async () => import('./views/activity.js'));
+router.register('/me',               async () => import('./views/me.js'));
+router.register('/messages',         async () => import('./views/messages.js'));
+router.register('/ask/:shortcode',   async () => import('./views/ask.js'));
+router.register('/faq',              async () => import('./views/page.js'));
 
 window.__anon = { openSignup, openLogin, updateAuthUI, refreshBadge };
 
@@ -166,38 +169,23 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 }
 
-// ---- Install prompt: capture event, then show our own chip after 2nd session ----
-let deferredPrompt = null;
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredPrompt = e;
-  maybeShowInstallChip();
-});
-
-function maybeShowInstallChip() {
-  if (!deferredPrompt) return;
-  if (document.getElementById('install-chip')) return;
-
-  const sessions = Number(localStorage.getItem('anon.sessions') || '0') + 1;
-  localStorage.setItem('anon.sessions', sessions);
-  if (sessions < 2) return;
-
-  const chip = document.createElement('button');
-  chip.id = 'install-chip';
-  chip.className = 'install-chip';
-  chip.type = 'button';
-  chip.textContent = 'Add Anonymous to home screen';
-  chip.addEventListener('click', async () => {
-    if (!deferredPrompt) return chip.remove();
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    deferredPrompt = null;
-    chip.remove();
-  });
-  document.body.appendChild(chip);
-}
-
 updateAuthUI();
 router.init();
 setInterval(refreshBadge, 60_000);
 setTimeout(refreshBadge, 500);
+
+// ---------- Cookie / storage disclosure ----------
+
+(function cookieBanner() {
+  if (localStorage.getItem('anon.cookies_ok')) return;
+  const banner = document.getElementById('cookie-banner');
+  if (!banner) return;
+  const btn = banner.querySelector('[data-action="accept-cookies"]');
+  setTimeout(() => { banner.hidden = false; }, 1200);
+  if (btn) {
+    btn.addEventListener('click', () => {
+      localStorage.setItem('anon.cookies_ok', '1');
+      banner.hidden = true;
+    });
+  }
+})();

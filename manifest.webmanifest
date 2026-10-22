@@ -4,20 +4,10 @@
   "description": "Say it. Nobody knows.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0E0E14",
-  "theme_color": "#0E0E14",
+  "background_color": "#100E0C",
+  "theme_color": "#100E0C",
   "icons": [
-    {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-maskable.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "maskable"
-    }
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ]
 }

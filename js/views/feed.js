@@ -1,9 +1,7 @@
 import * as api from '../api.js';
-import { timeAgo, renderAvatar, el, toast, sharePost, shareToWhatsApp, haptic,
+import { timeAgo, renderAvatar, el, toast, sharePost, haptic,
          formatReach, reachClass, openSheet, closeSheet } from '../ui.js';
 import { buildMediaUrl, buildViewerWatermark } from '../media.js';
-
-// ---------- CONSTANTS ----------
 
 const DAILY_PROMPTS = {
   0: { label: 'Sunday', text: "What's the best thing that happened this week?" },
@@ -15,18 +13,7 @@ const DAILY_PROMPTS = {
   6: { label: 'Saturday', text: "What's something small that made you smile today?" },
 };
 
-const SPICE_PROMPTS = [
-  { badge: 'Question of the day', text: "What's the worst advice you've ever gotten?" },
-  { badge: 'Campus prompt',       text: "Post about a professor who deserves an award." },
-  { badge: 'Unpopular opinion?',  text: "Say the thing nobody on campus is saying." },
-  { badge: 'Confession prompt',   text: "Something you've never told anyone." },
-  { badge: 'Rate it',             text: "Rate the dining hall. Be honest." },
-  { badge: 'Suggested topic',     text: "What's the most overrated place on campus?" },
-];
-
 const VIEWED_KEY = 'anon.viewedPosts';
-
-// ---------- HELPERS ----------
 
 function getViewedSet() {
   try { return new Set(JSON.parse(sessionStorage.getItem(VIEWED_KEY) || '[]')); }
@@ -38,16 +25,7 @@ function markViewed(postId) {
   sessionStorage.setItem(VIEWED_KEY, JSON.stringify([...set]));
 }
 
-function getDailyPrompt() {
-  return DAILY_PROMPTS[new Date().getDay()];
-}
-
-function presenceText(count) {
-  if (count == null || count < 5) return null;
-  if (count < 10) return 'A few students here';
-  if (count < 100) return `${count} students here now`;
-  return '100+ students here now';
-}
+function getDailyPrompt() { return DAILY_PROMPTS[new Date().getDay()]; }
 
 function classifyPost(post, myUid) {
   const classes = [];
@@ -68,18 +46,15 @@ function classifyPost(post, myUid) {
   return classes;
 }
 
-// ---------- MOUNT ----------
-
 export async function mount(root) {
   root.innerHTML = '';
   const screen = document.getElementById('tpl-feed-screen').content.firstElementChild.cloneNode(true);
   root.appendChild(screen);
 
-  const feed     = screen.querySelector('[data-role="feed"]');
-  const sentinel = screen.querySelector('[data-role="sentinel"]');
+  const feed      = screen.querySelector('[data-role="feed"]');
+  const sentinel  = screen.querySelector('[data-role="sentinel"]');
   const pinBanner = screen.querySelector('.pin-banner');
 
-  // --- Update pinned prompt with today's theme ---
   const dailyPrompt = getDailyPrompt();
   if (pinBanner) {
     pinBanner.querySelector('.pin-banner__label').textContent = dailyPrompt.label;
@@ -93,26 +68,17 @@ export async function mount(root) {
   if (!viewerAlias && api.isAuthed()) viewerAlias = await api.ensureAliasCached().catch(() => null);
   const watermark = buildViewerWatermark(viewerAlias);
 
-  // --- Presence banner (before feed loads, so layout is ready) ---
-  const presenceLoop = startPresenceLoop(screen, pinBanner);
-
   const skeletonTpl = document.getElementById('tpl-skeleton-card');
   for (let i = 0; i < 3; i++) feed.appendChild(skeletonTpl.content.firstElementChild.cloneNode(true));
 
   let posts = [];
-  let hotPost = null;
   try {
-    const [fetched, hot] = await Promise.all([
-      api.listFeed({ limit: 20 }),
-      api.getHotPost().catch(() => null),
-    ]);
-    posts = fetched;
-    hotPost = hot;
+    posts = await api.listFeed({ limit: 20, offset: 0 });
   } catch (err) {
     console.error('[feed] load failed:', err);
     feed.innerHTML = '';
     feed.appendChild(el('p', { class: 'empty-state__text' }, 'Could not load feed. Pull down to retry.'));
-    return () => { if (presenceLoop.interval) clearInterval(presenceLoop.interval); };
+    return;
   }
 
   feed.innerHTML = '';
@@ -121,10 +87,7 @@ export async function mount(root) {
 
   if (!posts.length) {
     feed.appendChild(document.getElementById('tpl-empty').content.firstElementChild.cloneNode(true));
-    return () => {
-      clearInterval(newPostsBar.interval);
-      if (presenceLoop.interval) clearInterval(presenceLoop.interval);
-    };
+    return () => clearInterval(newPostsBar.interval);
   }
 
   let myVotes = new Set();
@@ -164,29 +127,11 @@ export async function mount(root) {
 
   const observeCard = (card) => viewObserver.observe(card);
 
-  if (hotPost && hotPost.id) {
-    const hotCard = renderPostCard(hotPost, { isHot: true, myVotes, myUid, watermark });
-    feed.appendChild(hotCard);
-    observeCard(hotCard);
-  }
-
-  let lastSectionGroup = null;
   let renderedCount = 0;
   let landedElement = null;
 
-  const renderSection = (group) => {
-    if (group === lastSectionGroup) return;
-    lastSectionGroup = group;
-    const labels = { now: 'Just now', today: 'Today', yesterday: 'Yesterday', earlier: 'Earlier' };
-    const node = document.getElementById('tpl-section-header').content.firstElementChild.cloneNode(true);
-    node.textContent = labels[group];
-    node.dataset.section = group;
-    feed.appendChild(node);
-  };
-
   const appendPosts = (list) => {
     for (const post of list) {
-      renderSection(sectionFor(post.created_at));
       const card = renderPostCard(post, { myVotes, myUid, watermark });
       feed.appendChild(card);
       observeCard(card);
@@ -195,9 +140,6 @@ export async function mount(root) {
         card.classList.add('post-card--landed');
         landedElement = card;
         setTimeout(() => card.classList.remove('post-card--landed'), 1600);
-      }
-      if (renderedCount % 10 === 0) {
-        feed.appendChild(renderSpiceCard(renderedCount));
       }
     }
   };
@@ -217,8 +159,7 @@ export async function mount(root) {
     if (!entries[0].isIntersecting || loading || done) return;
     loading = true;
     try {
-      const last = posts[posts.length - 1];
-      const more = await api.listFeed({ limit: 20, before: last.created_at });
+      const more = await api.listFeed({ limit: 20, offset: posts.length });
       if (!more.length) { done = true; return; }
       posts = posts.concat(more);
       if (api.isAuthed()) {
@@ -237,74 +178,8 @@ export async function mount(root) {
     viewObserver.disconnect();
     clearInterval(newPostsBar.interval);
     clearInterval(reachTimer);
-    if (presenceLoop.interval) clearInterval(presenceLoop.interval);
   };
 }
-
-// ---------- PRESENCE ----------
-
-function startPresenceLoop(screen, pinBanner) {
-  const tpl = document.getElementById('tpl-presence-banner');
-  if (!tpl) return { interval: null };
-
-  const banner = tpl.content.firstElementChild.cloneNode(true);
-  const textEl = banner.querySelector('.presence-banner__text');
-
-  if (pinBanner && pinBanner.nextSibling) {
-    screen.insertBefore(banner, pinBanner.nextSibling);
-  } else if (pinBanner) {
-    screen.appendChild(banner);
-  } else {
-    const feed = screen.querySelector('[data-role="feed"]');
-    screen.insertBefore(banner, feed);
-  }
-
-  async function refresh() {
-    if (document.hidden) return;
-    if (!api.isAuthed()) return;
-    api.updatePresence().catch(() => {});
-    const count = await api.getActiveCount();
-    const text = presenceText(count);
-    if (text) {
-      banner.hidden = false;
-      textEl.textContent = text;
-    } else {
-      banner.hidden = true;
-    }
-  }
-
-  refresh();
-  const interval = setInterval(refresh, 30000);
-  return { interval };
-}
-
-// ---------- SECTION HEADERS ----------
-
-function sectionFor(dateStr) {
-  const d = new Date(dateStr);
-  const now = new Date();
-  const hours = (now - d) / (1000 * 60 * 60);
-  if (hours < 1) return 'now';
-  if (d.toDateString() === now.toDateString()) return 'today';
-  const y = new Date(now);
-  y.setDate(y.getDate() - 1);
-  if (d.toDateString() === y.toDateString()) return 'yesterday';
-  return 'earlier';
-}
-
-function renderSpiceCard(triggerAt) {
-  const prompt = SPICE_PROMPTS[Math.floor(triggerAt / 10 - 1) % SPICE_PROMPTS.length];
-  const card = document.getElementById('tpl-spice-card').content.firstElementChild.cloneNode(true);
-  card.querySelector('.spice-card__badge-text').textContent = prompt.badge;
-  card.querySelector('.spice-card__text').textContent = prompt.text;
-  card.querySelector('.spice-card__cta').addEventListener('click', () => {
-    sessionStorage.setItem('anon.composePrompt', prompt.text);
-    import('../router.js').then(r => r.navigate('/compose'));
-  });
-  return card;
-}
-
-// ---------- REACH ----------
 
 function updateReachDisplay(stats, reach, { animate = false } = {}) {
   if (!stats) return;
@@ -365,8 +240,6 @@ function startReachPolling(feed) {
   }, 30000);
 }
 
-// ---------- MEDIA ----------
-
 function renderMediaGrid(container, media, watermark, onOpen) {
   if (!container || !media || !media.length) { if (container) container.remove(); return; }
   container.innerHTML = '';
@@ -397,8 +270,8 @@ function openLightbox(media, startIndex, watermark) {
   const box = tpl.content.firstElementChild.cloneNode(true);
   box.id = 'photo-lightbox-root';
 
-  const imgEl  = box.querySelector('.photo-lightbox__img');
-  const wmEl   = box.querySelector('.photo-lightbox__watermark');
+  const imgEl   = box.querySelector('.photo-lightbox__img');
+  const wmEl    = box.querySelector('.photo-lightbox__watermark');
   const prevBtn = box.querySelector('[data-action="prev"]');
   const nextBtn = box.querySelector('[data-action="next"]');
   const closeBtn = box.querySelector('[data-action="close"]');
@@ -426,16 +299,17 @@ function openLightbox(media, startIndex, watermark) {
   show();
 }
 
-// ---------- POST CARD ----------
-
-function renderPostCard(post, { isHot = false, myVotes, myUid, watermark }) {
+function renderPostCard(post, { myVotes, myUid, watermark }) {
   const isPoll = post.type === 'poll';
-  const tplId = isPoll ? 'tpl-poll-card' : (isHot ? 'tpl-hot-post' : 'tpl-post-card');
+  const tplId = isPoll ? 'tpl-poll-card' : 'tpl-post-card';
   const card = document.getElementById(tplId).content.firstElementChild.cloneNode(true);
   card.dataset.postId = post.id;
 
-  // Apply classifier classes
   classifyPost(post, myUid).forEach(c => card.classList.add(c));
+  // Show a "pinned" badge if within 30-min window
+  if (post.pinned_until && new Date(post.pinned_until).getTime() > Date.now()) {
+    card.classList.add('post-card--pinned');
+  }
 
   renderAvatar(card.querySelector('.avatar'), post.author_alias);
   card.querySelector('.post-card__alias').textContent = post.author_alias;
@@ -478,7 +352,6 @@ function renderPostCard(post, { isHot = false, myVotes, myUid, watermark }) {
   const voteBtn    = card.querySelector('[data-action="vote"]');
   const commentBtn = card.querySelector('[data-action="open"]');
   const shareBtn   = card.querySelector('[data-action="share"]');
-  const waBtn      = card.querySelector('[data-action="share-whatsapp"]');
 
   voteBtn.querySelector('.post-card__count').textContent = post.upvote_count ?? 0;
   commentBtn.querySelector('.post-card__count').textContent = post.comment_count ?? 0;
@@ -510,7 +383,6 @@ function renderPostCard(post, { isHot = false, myVotes, myUid, watermark }) {
   commentBtn.addEventListener('click', goToPost);
   if (bodyEl) bodyEl.addEventListener('click', goToPost);
   shareBtn.addEventListener('click', (e) => { e.stopPropagation(); sharePost(post); });
-  waBtn.addEventListener('click', (e) => { e.stopPropagation(); shareToWhatsApp(post); });
 
   const menu = card.querySelector('[data-action="more"]');
   if (menu) menu.addEventListener('click', (e) => {
@@ -568,8 +440,6 @@ function renderPoll(box, data, post, card) {
   }
 }
 
-// ---------- MENU / REPORT ----------
-
 function openMoreMenu(post, card, myUid) {
   const node = document.getElementById('tpl-more-sheet').content.firstElementChild.cloneNode(true);
   const isMine = myUid && myUid === post.author_id;
@@ -610,8 +480,6 @@ function openReport(postId) {
   openSheet(node);
 }
 
-// ---------- RECAP ----------
-
 async function showRecapIfNeeded() {
   if (!api.isAuthed()) return;
   const lastVisit = localStorage.getItem('anon.lastVisit');
@@ -640,8 +508,6 @@ function presentRecapModal(recap) {
   });
   openSheet(node);
 }
-
-// ---------- NEW POSTS BAR ----------
 
 function mountNewPostsBar(screen) {
   const bar = document.getElementById('tpl-new-posts-bar').content.firstElementChild.cloneNode(true);

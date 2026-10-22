@@ -1,5 +1,5 @@
 import * as api from '../api.js';
-import { timeAgo, renderAvatar, el, toast, sharePost, shareToWhatsApp, haptic,
+import { timeAgo, renderAvatar, el, toast, sharePost, haptic,
          formatReach, reachClass, openSheet, closeSheet } from '../ui.js';
 import { buildMediaUrl, buildViewerWatermark } from '../media.js';
 
@@ -283,7 +283,6 @@ function buildPostCard(post, watermark) {
   const voteBtn = node.querySelector('[data-action="vote"]');
   const commentBtn = node.querySelector('[data-action="open"]');
   const shareBtn = node.querySelector('[data-action="share"]');
-  const waBtn = node.querySelector('[data-action="share-whatsapp"]');
   const voteCount = voteBtn.querySelector('.post-card__count');
   const commentCount = commentBtn.querySelector('.post-card__count');
   voteCount.textContent = post.upvote_count ?? 0;
@@ -314,7 +313,6 @@ function buildPostCard(post, watermark) {
   });
 
   shareBtn.addEventListener('click', () => sharePost(post));
-  if (waBtn) waBtn.addEventListener('click', () => shareToWhatsApp(post));
   commentBtn.style.pointerEvents = 'none';
 
   const myUid = api.isAuthed() ? api.getSession()?.user_id : null;

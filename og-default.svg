@@ -1,19 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
   <defs>
     <radialGradient id="glow" cx="50%" cy="35%" r="55%">
-      <stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.22"/>
-      <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#F59E0B" stop-opacity="0"/>
     </radialGradient>
   </defs>
-  <rect width="1200" height="630" fill="#0E0E14"/>
+  <rect width="1200" height="630" fill="#100E0C"/>
   <rect width="1200" height="630" fill="url(#glow)"/>
   <g transform="translate(536 120)">
-    <rect width="128" height="128" rx="28" fill="#8B5CF6"/>
-    <path d="M44 28L84 28A16 16 0 0 1 100 44L100 72A16 16 0 0 1 84 88L60 88L32 108L44 88A16 16 0 0 1 28 72L28 44A16 16 0 0 1 44 28Z" fill="#F5F5F7"/>
-    <circle cx="48" cy="56" r="6" fill="#8B5CF6"/>
-    <circle cx="64" cy="56" r="6" fill="#8B5CF6"/>
-    <circle cx="80" cy="56" r="6" fill="#8B5CF6"/>
+    <rect width="128" height="128" rx="28" fill="#F59E0B"/>
+    <path d="M44 28L84 28A16 16 0 0 1 100 44L100 72A16 16 0 0 1 84 88L60 88L32 108L44 88A16 16 0 0 1 28 72L28 44A16 16 0 0 1 44 28Z" fill="#100E0C"/>
+    <circle cx="48" cy="56" r="6" fill="#F59E0B"/>
+    <circle cx="64" cy="56" r="6" fill="#F59E0B"/>
+    <circle cx="80" cy="56" r="6" fill="#F59E0B"/>
   </g>
-  <text x="600" y="430" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="96" font-weight="700" fill="#F5F5F7" letter-spacing="-2">Anonymous</text>
-  <text x="600" y="500" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="36" fill="#9A9AA8">Say it. Nobody knows.</text>
+  <text x="600" y="430" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="96" font-weight="700" fill="#F5EFE6" letter-spacing="-2">Anonymous</text>
+  <text x="600" y="500" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="36" fill="#A89986">Say it. Nobody knows.</text>
 </svg>

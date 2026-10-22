@@ -72,7 +72,6 @@ export async function authFetch(path, opts = {}, retry = true) {
 
 const rpc     = (name, args) => publicFetch(`/rest/v1/rpc/${name}`, { method: 'POST', body: JSON.stringify(args) });
 const authRpc = (name, args) => authFetch(`/rest/v1/rpc/${name}`, { method: 'POST', body: JSON.stringify(args) });
-
 const rpcAuto = (name, args) => isAuthed() ? authRpc(name, args) : rpc(name, args);
 
 // ---------- AUTH ----------
@@ -162,11 +161,11 @@ export async function getActiveCount() {
 
 // ---------- FEED ----------
 
-export const listFeed = async ({ limit = 20, before = null, category = null } = {}) =>
+export const listFeed = async ({ limit = 20, offset = 0, category = null } = {}) =>
   rpcAuto('feed_posts', {
     p_university_id: await universityId(),
     p_limit: limit,
-    p_before: before,
+    p_offset: offset,
     p_category: category,
   });
 
@@ -537,6 +536,24 @@ export async function ensureAliasCached() {
   } catch {}
   return null;
 }
+
+// ---------- ANONYMOUS MESSAGES ----------
+
+export const getAskTarget       = (shortcode) => publicFetch('/rest/v1/rpc/get_ask_target', {
+  method: 'POST', body: JSON.stringify({ p_shortcode: shortcode }),
+});
+export const getMyAskLink       = ()          => authRpc('get_my_ask_link', {});
+export const sendAnonymousMessage = (shortcode, content) =>
+  authRpc('send_anonymous_message', { p_shortcode: shortcode, p_content: content });
+export const listMyMessages     = ()          => authRpc('list_my_messages', {});
+export const markMessageRead    = (id)        => authRpc('mark_message_read', { p_message_id: id });
+export const blockMessageSender = (id)        => authRpc('block_message_sender', { p_message_id: id });
+export const reportMessage      = (id, reason)=> authRpc('report_message', { p_message_id: id, p_reason: reason });
+export const deleteMyMessage    = (id)        => authRpc('delete_my_message', { p_message_id: id });
+export const replyPubliclyToMessage = (id, reply) =>
+  authRpc('reply_publicly_to_message', { p_message_id: id, p_reply: reply });
+export const getUnreadMessageCount = ()       => authRpc('get_unread_message_count', {});
+export const getMySendCountToday   = ()       => authRpc('get_my_send_count_today', {});
 
 // ---------- PUSH ----------
 

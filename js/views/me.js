@@ -15,7 +15,6 @@ export async function mount(root) {
   const renameBtn    = screen.querySelector('[data-role="rename"]');
   const notifState   = screen.querySelector('[data-role="notif-state"]');
 
-  // ---- Parallel data fetch ----
   const [profile, weekly, best, goal, milestones] = await Promise.all([
     api.getProfile().catch(() => null),
     api.myStatsThisWeek().catch(() => null),
@@ -24,18 +23,17 @@ export async function mount(root) {
     api.myMilestones().catch(() => []),
   ]);
 
-  if (!profile) {
-    toast('Could not load profile.');
-    return () => {};
-  }
+  if (!profile) { toast('Could not load profile.'); return () => {}; }
 
-  // ---- Identity ----
   aliasEl.textContent = profile.alias;
   renderAvatar(avatarEl, profile.alias, 'lg');
   const since = new Date(profile.created_at);
   sinceEl.textContent = `Anonymous since ${since.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`;
 
-  // ---- This week ----
+  // ---- Ask link card ----
+  mountAskCard(screen);
+
+  // ---- Weekly ----
   const weeklyEl = screen.querySelector('[data-role="weekly"]');
   if (weekly && (weekly.posts_this_week > 0 || weekly.likes_received_this_week > 0 || weekly.total_reach > 0)) {
     weeklyEl.hidden = false;
@@ -53,9 +51,7 @@ export async function mount(root) {
     screen.querySelector('[data-role="best-post-likes"]').textContent = best.upvote_count || 0;
     screen.querySelector('[data-role="best-post-comments"]').textContent = best.comment_count || 0;
     screen.querySelector('[data-role="best-post-reach"]').textContent = formatNum(best.view_count || 0);
-    screen.querySelector('[data-role="best-post-card"]').addEventListener('click', () => {
-      navigate(`/p/${best.id}`);
-    });
+    screen.querySelector('[data-role="best-post-card"]').addEventListener('click', () => navigate(`/p/${best.id}`));
   }
 
   // ---- Campus goal ----
@@ -72,7 +68,8 @@ export async function mount(root) {
   screen.querySelector('[data-action="share-app"]').addEventListener('click', () => {
     const url = location.origin;
     const text = `Join me on Anonymous — anonymous campus feed. Use CAMPUS-ONE: ${url}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+    if (navigator.share) navigator.share({ title: 'Anonymous', text }).catch(() => {});
+    else { navigator.clipboard.writeText(text); toast('Copied.'); }
   });
 
   // ---- Milestones ----
@@ -84,24 +81,18 @@ export async function mount(root) {
     milestones.forEach(m => {
       const node = tpl.content.firstElementChild.cloneNode(true);
       node.querySelector('.milestone__label').textContent = m.label;
-      if (m.achieved) {
-        node.classList.add('is-achieved');
-        node.querySelector('.milestone__progress').textContent = '';
-      } else {
-        node.querySelector('.milestone__progress').textContent = `${m.progress || 0}/${m.target}`;
-      }
+      if (m.achieved) node.classList.add('is-achieved');
+      else node.querySelector('.milestone__progress').textContent = `${m.progress || 0}/${m.target}`;
       listEl.appendChild(node);
     });
   }
 
   // ---- Rename ----
   renameBtn.addEventListener('click', () => {
-    const tpl = document.getElementById('tpl-rename-sheet');
-    const node = tpl.content.firstElementChild.cloneNode(true);
+    const node = document.getElementById('tpl-rename-sheet').content.firstElementChild.cloneNode(true);
     const form   = node.querySelector('[data-role="form"]');
     const input  = node.querySelector('[data-role="alias"]');
     const submit = node.querySelector('[data-role="submit"]');
-
     input.value = profile.alias;
 
     form.addEventListener('submit', async (e) => {
@@ -109,17 +100,12 @@ export async function mount(root) {
       const newAlias = input.value.trim();
       if (newAlias === profile.alias) return closeSheet();
       if (newAlias.length < 2 || newAlias.length > 24) return toast('Name must be 2–24 characters.');
-
       submit.disabled = true;
       const original = submit.textContent;
       submit.textContent = 'Saving…';
       try {
         const ok = await api.checkAliasAvailable(newAlias);
-        if (!ok) {
-          toast('That name is taken or reserved.');
-          submit.disabled = false; submit.textContent = original;
-          return;
-        }
+        if (!ok) { toast('That name is taken or reserved.'); submit.disabled = false; submit.textContent = original; return; }
         const saved = await api.updateAlias(newAlias);
         aliasEl.textContent = saved;
         renderAvatar(avatarEl, saved, 'lg');
@@ -129,26 +115,21 @@ export async function mount(root) {
       } catch (err) {
         const msg = String(err.message || err).toLowerCase();
         if (msg.includes('alias_cooldown')) toast('You can change your name once per day.');
-        else if (msg.includes('duplicate')) toast('That name is taken.');
-        else if (msg.includes('reserved')) toast('That name is reserved.');
         else toast('Rename failed.');
         submit.disabled = false;
         submit.textContent = original;
       }
     });
-
     openSheet(node);
     setTimeout(() => input.focus(), 250);
   });
 
-  // ---- Logout ----
   screen.querySelector('[data-action="logout"]').addEventListener('click', async () => {
     await api.signOut();
     window.__anon.updateAuthUI();
     navigate('/');
   });
 
-  // ---- Delete ----
   screen.querySelector('[data-action="delete"]').addEventListener('click', async () => {
     if (!confirm('Delete your account? Your email and profile will be removed, and your posts and replies will be shown as [deleted].')) return;
     if (!confirm('Are you absolutely sure? This cannot be undone.')) return;
@@ -157,13 +138,9 @@ export async function mount(root) {
       window.__anon.updateAuthUI();
       toast('Account deleted.');
       navigate('/');
-    } catch (err) {
-      console.error(err);
-      toast('Delete failed. Try again.');
-    }
+    } catch { toast('Delete failed. Try again.'); }
   });
 
-  // ---- Notifications ----
   if (!('Notification' in window) || !('serviceWorker' in navigator)) notifState.textContent = 'Unavailable';
   else if (Notification.permission === 'granted') notifState.textContent = 'On';
   else if (Notification.permission === 'denied') notifState.textContent = 'Blocked';
@@ -171,9 +148,9 @@ export async function mount(root) {
 
   screen.querySelector('[data-action="notifications"]').addEventListener('click', async () => {
     if (!('Notification' in window)) return toast('Notifications not supported.');
-    if (Notification.permission === 'denied') return toast('Notifications blocked in browser settings.');
+    if (Notification.permission === 'denied') return toast('Notifications blocked.');
     const perm = await Notification.requestPermission();
-    if (perm !== 'granted') { toast('Notifications declined.'); notifState.textContent = 'Off'; return; }
+    if (perm !== 'granted') { notifState.textContent = 'Off'; return; }
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({
@@ -183,14 +160,30 @@ export async function mount(root) {
       await api.savePushSubscription(sub.toJSON());
       notifState.textContent = 'On';
       toast('Notifications on.');
-    } catch (err) {
-      console.error(err);
-      notifState.textContent = 'Off';
-      toast('Could not enable notifications.');
-    }
+    } catch { notifState.textContent = 'Off'; toast('Could not enable.'); }
   });
 
   return () => {};
+}
+
+async function mountAskCard(screen) {
+  const card = screen.querySelector('[data-role="ask-card"]');
+  if (!card) return;
+  try {
+    const rows = await api.getMyAskLink();
+    const link = rows?.[0];
+    if (!link) { card.hidden = true; return; }
+    const url = `${location.origin}/ask/${link.shortcode}`;
+    card.querySelector('[data-role="ask-url"]').textContent = url.replace(/^https?:\/\//, '');
+    card.querySelector('[data-action="copy-ask"]').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(url); toast('Link copied.'); }
+      catch { toast('Copy failed.'); }
+    });
+    card.querySelector('[data-action="share-ask"]').addEventListener('click', () => {
+      if (navigator.share) navigator.share({ title: 'Send me anonymous messages', text: `Send me anonymous messages: ${url}`, url }).catch(() => {});
+      else { navigator.clipboard.writeText(url); toast('Copied.'); }
+    });
+  } catch { card.hidden = true; }
 }
 
 function formatNum(n) {

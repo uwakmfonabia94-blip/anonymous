@@ -7,15 +7,15 @@
   <title>Admin — Anonymous</title>
   <style>
     :root {
-      --bg: #0E0E14;
-      --surface: #17171F;
-      --elevated: #1F1F2B;
-      --border: rgba(255,255,255,0.08);
-      --text: #F5F5F7;
-      --text-muted: #9A9AA8;
-      --primary: #8B5CF6;
-      --like: #34D399;
-      --alert: #F59E0B;
+      --bg: #100E0C;
+      --surface: #1A1714;
+      --elevated: #252220;
+      --border: rgba(255,240,220,0.08);
+      --text: #F5EFE6;
+      --text-muted: #A89986;
+      --primary: #F59E0B;
+      --like: #EF4444;
+      --alert: #DC2626;
       --radius: 12px;
       color-scheme: dark;
     }
@@ -37,44 +37,53 @@
       padding: 8px 14px;
       transition: background 0.15s, transform 0.1s;
     }
-    button:hover { background: rgba(255,255,255,0.08); }
+    button:hover { background: rgba(255,240,220,0.08); }
     button:active { transform: scale(0.97); }
     button:disabled { opacity: 0.4; pointer-events: none; }
-    button.danger { color: var(--alert); border-color: rgba(245,158,11,0.35); }
-    input {
-      font: inherit;
-      background: var(--bg);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 14px;
-      font-size: 16px;
-      width: 100%;
-    }
-    input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(139,92,246,0.2); }
+    button.danger { color: var(--alert); border-color: rgba(220,38,38,0.4); }
 
-    /* Login */
-    #login-view {
+    /* State screens */
+    .state-screen {
       min-height: 100dvh;
       display: grid;
       place-items: center;
       padding: 24px;
     }
-    #login-form {
-      width: 100%; max-width: 320px;
-      display: flex; flex-direction: column; gap: 12px;
+    .state-card {
+      max-width: 420px;
+      text-align: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 24px;
     }
-    #login-form h1 { margin: 0 0 8px; font-size: 20px; font-weight: 700; }
-    #login-error { margin: 0; color: var(--alert); font-size: 13px; text-align: center; }
+    .state-card h1 { font-size: 20px; margin: 0 0 12px; font-weight: 700; }
+    .state-card p { color: var(--text-muted); margin: 0 0 16px; line-height: 1.55; }
+    .state-card .state-meta { color: var(--text); font-weight: 500; }
+    .state-link {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 10px 20px;
+      background: var(--primary);
+      color: #100E0C;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+    .state-link:hover { opacity: 0.9; }
 
     /* Dashboard */
-    #dashboard-view { padding: 24px; max-width: 1280px; margin: 0 auto; }
-    #dashboard-view > header {
+    #state-dashboard { padding: 24px; max-width: 1280px; margin: 0 auto; }
+    #state-dashboard > header {
       display: flex; justify-content: space-between; align-items: center;
-      margin-bottom: 24px;
+      margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
     }
-    #dashboard-view > header h1 { font-size: 20px; font-weight: 700; margin: 0; }
-    #dashboard-view > header > div { display: flex; gap: 8px; }
+    #state-dashboard > header h1 { font-size: 20px; font-weight: 700; margin: 0; }
+    #state-dashboard > header > div { display: flex; gap: 8px; align-items: center; }
+    .header-link {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .header-link:hover { color: var(--text); }
 
     section { margin-bottom: 32px; }
     section h2 {
@@ -82,7 +91,6 @@
       color: var(--text-muted); margin: 0 0 12px;
     }
 
-    /* KPI */
     #kpi-row {
       display: grid; grid-template-columns: repeat(4, 1fr);
       gap: 12px; margin-bottom: 24px;
@@ -98,7 +106,6 @@
     .kpi-card__value { font-size: 28px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
     .kpi-card--alert .kpi-card__value { color: var(--alert); }
 
-    /* Charts */
     .chart-box {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 16px; min-height: 180px;
@@ -108,11 +115,10 @@
       content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px;
       margin-right: 6px; vertical-align: middle;
     }
-    .chart-legend .legend-dau::before { background: #8B5CF6; }
+    .chart-legend .legend-dau::before { background: var(--primary); }
     .chart-legend .legend-posts::before { background: #34D399; }
     .chart-legend .legend-comments::before { background: #22D3EE; }
 
-    /* Tables */
     .table-wrap {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); overflow: hidden;
@@ -121,19 +127,14 @@
     th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
     th {
       font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
-      color: var(--text-muted); background: rgba(255,255,255,0.02);
+      color: var(--text-muted); background: rgba(255,240,220,0.02);
     }
     tr:last-child td { border-bottom: 0; }
     td.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-muted); }
-    td.content {
-      max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
+    td.content { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     td.actions { text-align: right; white-space: nowrap; }
     td.actions button { padding: 4px 10px; font-size: 12px; margin-left: 4px; }
-    .empty {
-      padding: 32px 16px; text-align: center;
-      color: var(--text-muted); font-size: 13px;
-    }
+    .empty { padding: 32px 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
 
     #status {
       position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
@@ -146,28 +147,56 @@
 
     @media (max-width: 720px) {
       #kpi-row { grid-template-columns: repeat(2, 1fr); }
-      #dashboard-view { padding: 16px; }
+      #state-dashboard { padding: 16px; }
       td.content { max-width: 180px; }
     }
   </style>
 </head>
 <body>
 
-<div id="login-view">
-  <form id="login-form" autocomplete="off" onsubmit="return false;">
-    <h1>Anonymous · Admin</h1>
-    <input id="password" type="password" placeholder="Password" required autofocus>
-    <button id="login-btn" type="button">Enter</button>
-    <p id="login-error" hidden>Wrong password</p>
-  </form>
+<div id="state-loading" class="state-screen">
+  <div class="state-card"><h1>Checking access…</h1></div>
 </div>
 
-<div id="dashboard-view" hidden>
+<div id="state-not-logged-in" class="state-screen" hidden>
+  <div class="state-card">
+    <h1>Not logged in</h1>
+    <p>You need to be signed in to the app first. Open the feed, sign in with your account, then come back to this page.</p>
+    <a href="/" class="state-link">Open the app →</a>
+  </div>
+</div>
+
+<div id="state-session-expired" class="state-screen" hidden>
+  <div class="state-card">
+    <h1>Session expired</h1>
+    <p>Your app session has expired. Log in again, then come back to this page.</p>
+    <a href="/" class="state-link">Log in →</a>
+  </div>
+</div>
+
+<div id="state-not-admin" class="state-screen" hidden>
+  <div class="state-card">
+    <h1>No admin access</h1>
+    <p>This account doesn't have admin privileges.</p>
+    <p id="not-admin-alias" class="state-meta"></p>
+    <a href="/" class="state-link">Back to the app →</a>
+  </div>
+</div>
+
+<div id="state-error" class="state-screen" hidden>
+  <div class="state-card">
+    <h1>Something went wrong</h1>
+    <p id="error-message"></p>
+    <button type="button" id="retry-btn">Retry</button>
+  </div>
+</div>
+
+<div id="state-dashboard" hidden>
   <header>
     <h1>Anonymous · Admin</h1>
     <div>
       <button id="refresh-btn" type="button">Refresh</button>
-      <button id="logout-btn" type="button">Log out</button>
+      <a href="/" class="header-link">Open app →</a>
     </div>
   </header>
 
@@ -203,139 +232,99 @@
   </section>
 
   <section>
-    <h2>Top 10 this week — for Best of Campus</h2>
+    <h2>Top 10 this week</h2>
     <div class="table-wrap" id="top-box"></div>
   </section>
 </div>
 
 <div id="status"></div>
 
-<script>
-const SESSION_KEY = 'admin.token';
-let currentToken = null;
+<script type="module">
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '/js/config.js';
 
-const loginView     = document.getElementById('login-view');
-const dashboardView = document.getElementById('dashboard-view');
-const loginForm     = document.getElementById('login-form');
-const loginError    = document.getElementById('login-error');
-const passwordInput = document.getElementById('password');
-const loginBtn      = document.getElementById('login-btn');
-const statusEl      = document.getElementById('status');
-const refreshBtn    = document.getElementById('refresh-btn');
-const logoutBtn     = document.getElementById('logout-btn');
+const SESSION_KEY = 'anon.session';
+const STATES = ['state-loading','state-not-logged-in','state-session-expired','state-not-admin','state-error','state-dashboard'];
+
+function getSession() {
+  try { const r = localStorage.getItem(SESSION_KEY); return r ? JSON.parse(r) : null; }
+  catch { return null; }
+}
+
+function showState(name) {
+  STATES.forEach(s => { document.getElementById(s).hidden = (s !== name); });
+}
 
 function showStatus(msg) {
-  statusEl.textContent = msg;
-  statusEl.classList.add('visible');
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.classList.add('visible');
   clearTimeout(showStatus._t);
-  showStatus._t = setTimeout(() => statusEl.classList.remove('visible'), 2200);
+  showStatus._t = setTimeout(() => el.classList.remove('visible'), 2200);
 }
 
-async function api(action, extra = {}) {
-  const res = await fetch('/api/admin', {
+async function callRpc(name, args = {}) {
+  const session = getSession();
+  if (!session?.access_token) throw new Error('no_session');
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action, token: currentToken, ...extra }),
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(args),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `http_${res.status}`);
-  return data;
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || String(res.status));
+  return text ? JSON.parse(text) : null;
 }
 
-// ---------- Login ----------
+async function boot() {
+  showState('state-loading');
+  const session = getSession();
 
-async function doLogin() {
-  loginError.hidden = true;
-  const pw = passwordInput.value.trim();
-  if (!pw) return;
+  if (!session?.access_token) { showState('state-not-logged-in'); return; }
 
-  loginBtn.disabled = true;
-  try {
-    const res = await fetch('/api/admin', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'login', password: pw }),
-    });
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      if (data.error === 'wrong_password') loginError.hidden = false;
-      else showStatus('Login failed: ' + (data.error || res.status));
-      return;
-    }
-
-    currentToken = data.token;
-    sessionStorage.setItem(SESSION_KEY, data.token);
-    passwordInput.value = '';
-    await loadDashboard();
-  } catch (err) {
-    showStatus('Network error: ' + err.message);
-  } finally {
-    loginBtn.disabled = false;
+  if (session.expires_at && session.expires_at < Date.now()) {
+    showState('state-session-expired'); return;
   }
-}
 
-loginBtn.addEventListener('click', (e) => { e.preventDefault(); doLogin(); });
-
-loginForm.addEventListener('submit', (e) => { e.preventDefault(); doLogin(); });
-
-passwordInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); doLogin(); }
-});
-
-// ---------- Dashboard ----------
-
-async function loadDashboard() {
   try {
-    const data = await api('dashboard');
-    loginView.hidden = true;
-    dashboardView.hidden = false;
+    const data = await callRpc('admin_dashboard');
+    showState('state-dashboard');
     renderAll(data);
   } catch (err) {
-    if (String(err.message).includes('unauthorized')) {
-      sessionStorage.removeItem(SESSION_KEY);
-      currentToken = null;
-      dashboardView.hidden = true;
-      loginView.hidden = false;
-      showStatus('Session expired');
+    const msg = String(err.message);
+
+    if (msg.includes('unauthorized')) {
+      // Fetch their alias so we can show who they're logged in as
+      try {
+        const meRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${session.user_id}&select=alias`, {
+          headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` },
+        });
+        const me = await meRes.json();
+        if (me?.[0]?.alias) {
+          document.getElementById('not-admin-alias').textContent = `You're logged in as ${me[0].alias}.`;
+        }
+      } catch {}
+      showState('state-not-admin');
+    } else if (msg.includes('JWT expired') || msg.includes('Invalid JWT') || msg.includes('no_session')) {
+      showState('state-session-expired');
     } else {
-      showStatus('Load failed: ' + err.message);
+      document.getElementById('error-message').textContent = msg.slice(0, 300);
+      showState('state-error');
     }
   }
 }
-
-async function refresh() {
-  refreshBtn.disabled = true;
-  try {
-    await loadDashboard();
-    showStatus('Refreshed');
-  } catch (err) {
-    showStatus('Refresh failed: ' + err.message);
-  } finally {
-    refreshBtn.disabled = false;
-  }
-}
-
-refreshBtn.addEventListener('click', refresh);
-
-logoutBtn.addEventListener('click', () => {
-  sessionStorage.removeItem(SESSION_KEY);
-  currentToken = null;
-  dashboardView.hidden = true;
-  loginView.hidden = false;
-  passwordInput.focus();
-});
-
-// ---------- Renderers ----------
 
 function renderAll(data) {
   renderKPI(data.kpi);
   renderChart(document.getElementById('dau-chart'), [
-    { label: 'DAU', color: '#8B5CF6', data: data.dau_series || [] },
+    { color: '#F59E0B', data: data.dau_series || [] },
   ]);
   renderChart(document.getElementById('volume-chart'), [
-    { label: 'Posts', color: '#34D399', data: data.volume_posts || [] },
-    { label: 'Comments', color: '#22D3EE', data: data.volume_comments || [] },
+    { color: '#34D399', data: data.volume_posts || [] },
+    { color: '#22D3EE', data: data.volume_comments || [] },
   ]);
   renderReports(data.reports || []);
   renderRecent(data.recent_posts || []);
@@ -384,12 +373,12 @@ function renderChart(container, series) {
 
   const grid = [0, 0.5, 1].map(f => {
     const yy = pad.t + ih - f * ih;
-    return `<line x1="${pad.l}" x2="${pad.l + iw}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,0.06)" stroke-width="1" />`;
+    return `<line x1="${pad.l}" x2="${pad.l + iw}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="rgba(255,240,220,0.06)" stroke-width="1" />`;
   }).join('');
 
   const yLabels = [0, Math.round(maxVal / 2), maxVal].map(v => {
     const yy = y(v);
-    return `<text x="${pad.l - 8}" y="${yy + 4}" font-size="10" fill="#9A9AA8" text-anchor="end">${v}</text>`;
+    return `<text x="${pad.l - 8}" y="${yy + 4}" font-size="10" fill="#A89986" text-anchor="end">${v}</text>`;
   }).join('');
 
   const mainSeries = series.find(s => s.data && s.data.length);
@@ -398,7 +387,7 @@ function renderChart(container, series) {
     .filter(({ i }) => i % 7 === 0 || i === n - 1)
     .map(({ pt, i }) => {
       const label = (pt.day || '').slice(5);
-      return `<text x="${x(i).toFixed(1)}" y="${pad.t + ih + 16}" font-size="10" fill="#9A9AA8" text-anchor="middle">${label}</text>`;
+      return `<text x="${x(i).toFixed(1)}" y="${pad.t + ih + 16}" font-size="10" fill="#A89986" text-anchor="middle">${label}</text>`;
     }).join('');
 
   container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block">${grid}${paths}${yLabels}${xLabels}</svg>`;
@@ -419,12 +408,10 @@ function renderReports(reports) {
       </td>
     </tr>
   `).join('');
-  box.innerHTML = `
-    <table>
-      <thead><tr><th>Reason</th><th>Post</th><th>Author</th><th>When</th><th></th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
+  box.innerHTML = `<table>
+    <thead><tr><th>Reason</th><th>Post</th><th>Author</th><th>When</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
 function renderRecent(posts) {
@@ -444,12 +431,10 @@ function renderRecent(posts) {
       </td>
     </tr>
   `).join('');
-  box.innerHTML = `
-    <table>
-      <thead><tr><th>Content</th><th>Type</th><th>Author</th><th>♡</th><th>💬</th><th>👁</th><th></th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
+  box.innerHTML = `<table>
+    <thead><tr><th>Content</th><th>Type</th><th>Author</th><th>♡</th><th>💬</th><th>👁</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
 function renderTop(posts) {
@@ -469,15 +454,11 @@ function renderTop(posts) {
       </td>
     </tr>
   `).join('');
-  box.innerHTML = `
-    <table>
-      <thead><tr><th>Rank</th><th>Content</th><th>Author</th><th>♡</th><th>💬</th><th>👁</th><th></th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
+  box.innerHTML = `<table>
+    <thead><tr><th>Rank</th><th>Content</th><th>Author</th><th>♡</th><th>💬</th><th>👁</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
-
-// ---------- Actions ----------
 
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-action]');
@@ -487,14 +468,14 @@ document.addEventListener('click', async (e) => {
   if (action === 'delete-post') {
     const postId = btn.dataset.postId;
     if (!postId) return;
-    if (!confirm('Delete this post permanently?\n\nNote: storage files (photos) will remain in the bucket and must be cleaned up manually.')) return;
+    if (!confirm('Delete this post permanently?')) return;
     btn.disabled = true;
     try {
-      await api('delete_post', { postId });
+      await callRpc('admin_delete_post', { p_post_id: postId });
       showStatus('Post deleted');
-      await refresh();
+      await boot();
     } catch (err) {
-      showStatus('Delete failed: ' + err.message);
+      showStatus('Delete failed: ' + err.message.slice(0, 80));
       btn.disabled = false;
     }
   }
@@ -504,26 +485,23 @@ document.addEventListener('click', async (e) => {
     if (!reportId) return;
     btn.disabled = true;
     try {
-      await api('resolve_report', { reportId });
+      await callRpc('admin_resolve_report', { p_report_id: reportId });
       showStatus('Report resolved');
-      await refresh();
+      await boot();
     } catch (err) {
-      showStatus('Resolve failed: ' + err.message);
+      showStatus('Resolve failed: ' + err.message.slice(0, 80));
       btn.disabled = false;
     }
   }
 
   if (action === 'copy-id') {
-    const postId = btn.dataset.postId;
-    if (!postId) return;
-    try {
-      await navigator.clipboard.writeText(postId);
-      showStatus('Post ID copied');
-    } catch { showStatus('Copy failed'); }
+    try { await navigator.clipboard.writeText(btn.dataset.postId); showStatus('Copied'); }
+    catch { showStatus('Copy failed'); }
   }
 });
 
-// ---------- Helpers ----------
+document.getElementById('refresh-btn').addEventListener('click', boot);
+document.getElementById('retry-btn').addEventListener('click', boot);
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c =>
@@ -539,15 +517,7 @@ function relativeTime(iso) {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-// ---------- Session restore on page load ----------
-
-(function init() {
-  const saved = sessionStorage.getItem(SESSION_KEY);
-  if (saved) {
-    currentToken = saved;
-    loadDashboard();
-  }
-})();
+boot();
 </script>
 </body>
 </html>

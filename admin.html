@@ -154,10 +154,10 @@
 <body>
 
 <div id="login-view">
-  <form id="login-form" autocomplete="off">
+  <form id="login-form" autocomplete="off" onsubmit="return false;">
     <h1>Anonymous · Admin</h1>
     <input id="password" type="password" placeholder="Password" required autofocus>
-    <button type="submit">Enter</button>
+    <button id="login-btn" type="button">Enter</button>
     <p id="login-error" hidden>Wrong password</p>
   </form>
 </div>
@@ -219,6 +219,7 @@ const dashboardView = document.getElementById('dashboard-view');
 const loginForm     = document.getElementById('login-form');
 const loginError    = document.getElementById('login-error');
 const passwordInput = document.getElementById('password');
+const loginBtn      = document.getElementById('login-btn');
 const statusEl      = document.getElementById('status');
 const refreshBtn    = document.getElementById('refresh-btn');
 const logoutBtn     = document.getElementById('logout-btn');
@@ -243,10 +244,12 @@ async function api(action, extra = {}) {
 
 // ---------- Login ----------
 
-loginForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
+async function doLogin() {
   loginError.hidden = true;
-  const pw = passwordInput.value;
+  const pw = passwordInput.value.trim();
+  if (!pw) return;
+
+  loginBtn.disabled = true;
   try {
     const res = await fetch('/api/admin', {
       method: 'POST',
@@ -254,18 +257,30 @@ loginForm.addEventListener('submit', async (e) => {
       body: JSON.stringify({ action: 'login', password: pw }),
     });
     const data = await res.json().catch(() => ({}));
+
     if (!res.ok) {
       if (data.error === 'wrong_password') loginError.hidden = false;
       else showStatus('Login failed: ' + (data.error || res.status));
       return;
     }
+
     currentToken = data.token;
     sessionStorage.setItem(SESSION_KEY, data.token);
     passwordInput.value = '';
     await loadDashboard();
   } catch (err) {
     showStatus('Network error: ' + err.message);
+  } finally {
+    loginBtn.disabled = false;
   }
+}
+
+loginBtn.addEventListener('click', (e) => { e.preventDefault(); doLogin(); });
+
+loginForm.addEventListener('submit', (e) => { e.preventDefault(); doLogin(); });
+
+passwordInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); doLogin(); }
 });
 
 // ---------- Dashboard ----------

@@ -14,6 +14,7 @@ const DAILY_PROMPTS = {
 };
 
 const VIEWED_KEY = 'anon.viewedPosts';
+const GUEST_LIMIT = 5;
 
 function getViewedSet() {
   try { return new Set(JSON.parse(sessionStorage.getItem(VIEWED_KEY) || '[]')); }
@@ -64,6 +65,8 @@ export async function mount(root) {
   const justPostedId = sessionStorage.getItem('anon.justPosted');
   sessionStorage.removeItem('anon.justPosted');
 
+  const isGuest = !api.isAuthed();
+
   let viewerAlias = api.getCachedAlias();
   if (!viewerAlias && api.isAuthed()) viewerAlias = await api.ensureAliasCached().catch(() => null);
   const watermark = buildViewerWatermark(viewerAlias);
@@ -79,6 +82,17 @@ export async function mount(root) {
     feed.innerHTML = '';
     feed.appendChild(el('p', { class: 'empty-state__text' }, 'Could not load feed. Pull down to retry.'));
     return;
+  }
+
+  // CRITICAL FIX: if a post was just created and isn't in the feed response
+  // (race condition or ranking exclusion), fetch it and force it to the top.
+  if (justPostedId && !posts.some(p => p.id === justPostedId)) {
+    try {
+      const myPost = await api.getPostFull(justPostedId);
+      if (myPost) posts.unshift(myPost);
+    } catch (err) {
+      console.warn('[feed] could not fetch just-posted post:', err);
+    }
   }
 
   feed.innerHTML = '';
@@ -144,17 +158,22 @@ export async function mount(root) {
     }
   };
 
-  appendPosts(posts);
+  // CRITICAL FIX: cap visible posts for guests
+  const visiblePosts = isGuest ? posts.slice(0, GUEST_LIMIT) : posts;
+  appendPosts(visiblePosts);
+
   if (landedElement) window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  if (!api.isAuthed() && posts.length >= 5) {
+  // CRITICAL FIX: guest soft wall, and no more posts for guests
+  if (isGuest) {
     feed.appendChild(document.getElementById('tpl-soft-wall').content.firstElementChild.cloneNode(true));
   }
 
   const reachTimer = startReachPolling(feed);
 
+  // CRITICAL FIX: disable infinite scroll for guests
   let loading = false;
-  let done = false;
+  let done = isGuest;
   const scrollObserver = new IntersectionObserver(async (entries) => {
     if (!entries[0].isIntersecting || loading || done) return;
     loading = true;
@@ -171,7 +190,7 @@ export async function mount(root) {
       appendPosts(more);
     } catch {} finally { loading = false; }
   }, { rootMargin: '200px' });
-  scrollObserver.observe(sentinel);
+  if (!isGuest) scrollObserver.observe(sentinel);
 
   return () => {
     scrollObserver.disconnect();
@@ -299,17 +318,13 @@ function openLightbox(media, startIndex, watermark) {
   show();
 }
 
-function renderPostCard(post, { myVotes, myUid, watermark }) {
+function renderPostCard(post, { isHot = false, myVotes, myUid, watermark }) {
   const isPoll = post.type === 'poll';
-  const tplId = isPoll ? 'tpl-poll-card' : 'tpl-post-card';
+  const tplId = isPoll ? 'tpl-poll-card' : (isHot ? 'tpl-hot-post' : 'tpl-post-card');
   const card = document.getElementById(tplId).content.firstElementChild.cloneNode(true);
   card.dataset.postId = post.id;
 
   classifyPost(post, myUid).forEach(c => card.classList.add(c));
-  // Show a "pinned" badge if within 30-min window
-  if (post.pinned_until && new Date(post.pinned_until).getTime() > Date.now()) {
-    card.classList.add('post-card--pinned');
-  }
 
   renderAvatar(card.querySelector('.avatar'), post.author_alias);
   card.querySelector('.post-card__alias').textContent = post.author_alias;
@@ -345,9 +360,7 @@ function renderPostCard(post, { myVotes, myUid, watermark }) {
   const stats = card.querySelector('.post-card__stats');
   updateReachDisplay(stats, post.view_count || 0);
 
-  if (isPoll) {
-    renderPoll(card.querySelector('[data-role="poll"]'), post.poll_data, post, card);
-  }
+  if (isPoll) renderPoll(card.querySelector('[data-role="poll"]'), post.poll_data, post, card);
 
   const voteBtn    = card.querySelector('[data-action="vote"]');
   const commentBtn = card.querySelector('[data-action="open"]');

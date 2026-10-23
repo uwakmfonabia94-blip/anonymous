@@ -35,9 +35,7 @@ export function openSignup() {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const wantedAlias = alias.value.trim();
-    if (wantedAlias.length < 2 || wantedAlias.length > 24) {
-      return toast('Name must be 2–24 characters.');
-    }
+    if (wantedAlias.length < 2 || wantedAlias.length > 24) return toast('Name must be 2–24 characters.');
 
     submit.disabled = true;
     const original = submit.textContent;
@@ -47,7 +45,7 @@ export function openSignup() {
       const inviteOk = await api.checkInviteCode(invite.value.trim());
       if (!inviteOk) { toast("That invite code didn't work."); submit.disabled = false; submit.textContent = original; return; }
       const aliasOk = await api.checkAliasAvailable(wantedAlias);
-      if (!aliasOk) { toast('That name is taken or reserved. Try another.'); submit.disabled = false; submit.textContent = original; return; }
+      if (!aliasOk) { toast('That name is taken or reserved.'); submit.disabled = false; submit.textContent = original; return; }
 
       await api.signUp({ alias: wantedAlias, email: email.value.trim(), password: pw.value, inviteCode: invite.value.trim(), agreed: agree.checked });
       closeSheet();
@@ -119,24 +117,15 @@ export function updateAuthUI() {
 
 async function refreshBadge() {
   const badge = document.getElementById('nav-badge');
-  const msgBadge = document.getElementById('msg-badge');
   if (!api.isAuthed()) {
     if (badge) badge.hidden = true;
-    if (msgBadge) msgBadge.hidden = true;
     return;
   }
   try {
-    const [activityN, messageN] = await Promise.all([
-      api.getUnreadCount().catch(() => 0),
-      api.getUnreadMessageCount().catch(() => 0),
-    ]);
+    const n = await api.getUnreadCount();
     if (badge) {
-      if (activityN > 0) { badge.textContent = activityN > 9 ? '9+' : activityN; badge.hidden = false; }
+      if (n > 0) { badge.textContent = n > 9 ? '9+' : n; badge.hidden = false; }
       else badge.hidden = true;
-    }
-    if (msgBadge) {
-      if (messageN > 0) { msgBadge.textContent = messageN > 9 ? '9+' : messageN; msgBadge.hidden = false; }
-      else msgBadge.hidden = true;
     }
   } catch {}
 }
@@ -159,6 +148,7 @@ router.register('/p/:id',            async () => import('./views/post.js'));
 router.register('/compose',          async () => import('./views/compose.js'));
 router.register('/activity',         async () => import('./views/activity.js'));
 router.register('/me',               async () => import('./views/me.js'));
+router.register('/discover',         async () => import('./views/discover.js'));
 router.register('/messages',         async () => import('./views/messages.js'));
 router.register('/ask/:shortcode',   async () => import('./views/ask.js'));
 router.register('/faq',              async () => import('./views/page.js'));
@@ -173,8 +163,6 @@ updateAuthUI();
 router.init();
 setInterval(refreshBadge, 60_000);
 setTimeout(refreshBadge, 500);
-
-// ---------- Cookie / storage disclosure ----------
 
 (function cookieBanner() {
   if (localStorage.getItem('anon.cookies_ok')) return;

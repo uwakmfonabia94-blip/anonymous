@@ -1,4 +1,4 @@
-const CACHE = 'anon-v2';
+const CACHE = 'anon-v4';
 const SHELL = ['/', '/css/style.css', '/js/app.js'];
 
 self.addEventListener('install', (e) => {

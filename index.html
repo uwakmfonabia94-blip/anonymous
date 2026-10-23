@@ -23,6 +23,7 @@
   <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></symbol>
   <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></symbol>
   <symbol id="i-inbox" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
   <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
   <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
@@ -90,9 +91,8 @@
     <button class="bottom-nav__compose" aria-label="Compose" data-action="compose" type="button">
       <svg class="icon icon--24"><use href="#i-plus"/></svg>
     </button>
-    <a class="bottom-nav__item" href="/messages" data-route="messages">
-      <svg class="icon icon--24"><use href="#i-inbox"/></svg><span>Messages</span>
-      <span class="bottom-nav__badge" id="msg-badge" hidden></span>
+    <a class="bottom-nav__item" href="/discover" data-route="discover">
+      <svg class="icon icon--24"><use href="#i-compass"/></svg><span>Discover</span>
     </a>
     <a class="bottom-nav__item" href="/me" data-route="me">
       <svg class="icon icon--24"><use href="#i-user"/></svg><span>Me</span>
@@ -134,6 +134,46 @@
       <button class="post-card__menu" data-action="more" aria-label="More options">
         <svg class="icon icon--18"><use href="#i-more"/></svg>
       </button>
+    </header>
+    <p class="post-card__body"></p>
+    <div class="post-media" data-role="media"></div>
+    <div class="post-card__teaser" hidden>
+      <span class="post-card__teaser__author"></span>
+      <span class="post-card__teaser__text"></span>
+    </div>
+    <div class="post-card__stats" hidden>
+      <svg class="icon icon--14 post-card__reach-icon"><use href="#i-eye"/></svg>
+      <span class="post-card__reach">0</span>
+    </div>
+    <footer class="post-card__actions">
+      <button class="post-card__action" data-action="vote" aria-label="Like">
+        <svg class="icon icon--18"><use href="#i-heart"/></svg><span class="post-card__count">0</span>
+      </button>
+      <button class="post-card__action" data-action="open" aria-label="Comments">
+        <svg class="icon icon--18"><use href="#i-message"/></svg><span class="post-card__count">0</span>
+      </button>
+      <button class="post-card__action" data-action="share" aria-label="Share">
+        <svg class="icon icon--18"><use href="#i-share"/></svg>
+      </button>
+    </footer>
+  </article>
+</template>
+
+<template id="tpl-hot-post">
+  <article class="post-card post-card--hot" data-post-id="">
+    <div class="post-card__hot-badge">
+      <svg class="icon icon--14"><use href="#i-flame"/></svg>
+      <span>Hot right now</span>
+    </div>
+    <header class="post-card__header">
+      <span class="avatar" aria-hidden="true"></span>
+      <div class="post-card__meta">
+        <span class="post-card__alias"></span>
+        <span class="post-card__dot">·</span>
+        <span class="post-card__time"></span>
+        <span class="post-card__dot post-card__category-dot" hidden>·</span>
+        <span class="post-card__category" hidden></span>
+      </div>
     </header>
     <p class="post-card__body"></p>
     <div class="post-media" data-role="media"></div>
@@ -555,6 +595,21 @@
     <span class="milestone__label"></span>
     <span class="milestone__progress"></span>
   </li>
+</template>
+
+<template id="tpl-discover">
+  <div class="screen screen--discover">
+    <header class="page-header"><h1 class="page-header__title">Discover</h1></header>
+    <div class="compose__chips" data-role="chips">
+      <button type="button" class="chip chip--active" data-cat="">All</button>
+      <button type="button" class="chip" data-cat="Confession">#Confession</button>
+      <button type="button" class="chip" data-cat="Question">#Question</button>
+      <button type="button" class="chip" data-cat="CampusLife">#CampusLife</button>
+      <button type="button" class="chip" data-cat="Rant">#Rant</button>
+      <button type="button" class="chip" data-cat="Wholesome">#Wholesome</button>
+    </div>
+    <div class="feed-list" data-role="feed"></div>
+  </div>
 </template>
 
 <template id="tpl-messages-screen">

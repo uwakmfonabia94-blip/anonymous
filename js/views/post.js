@@ -1,7 +1,8 @@
 import * as api from '../api.js';
-import { timeAgo, renderAvatar, el, toast, sharePost, haptic,
-         formatReach, reachClass, openSheet, closeSheet } from '../ui.js';
+import { timeAgo, el, toast, sharePost, haptic, openSheet, closeSheet } from '../ui.js';
 import { buildMediaUrl, buildViewerWatermark } from '../media.js';
+
+const GUEST_COMMENT_LIMIT = 5;
 
 export async function mount(root, params) {
   root.innerHTML = '';
@@ -17,36 +18,32 @@ export async function mount(root, params) {
   screen.querySelector('[data-action="back"]').addEventListener('click', () => history.back());
   postBox.innerHTML = '<p class="empty-state__text" style="padding:24px 0;">Loading…</p>';
 
+  const isGuest = !api.isAuthed();
   let viewerAlias = api.getCachedAlias();
-  if (!viewerAlias && api.isAuthed()) viewerAlias = await api.ensureAliasCached().catch(() => null);
+  if (!viewerAlias && !isGuest) viewerAlias = await api.ensureAliasCached().catch(() => null);
   const watermark = buildViewerWatermark(viewerAlias);
 
   let post;
   try { post = await api.getPostFull(params.id); }
   catch (err) {
-    console.error('[post.js] getPostFull threw:', err);
     postBox.innerHTML = '';
-    postBox.appendChild(el('p', { class: 'empty-state__text', style: 'padding:24px 0;color:var(--alert);' }, 'Could not load this post.'));
+    postBox.appendChild(el('p', { class: 'empty-state__text', style: 'padding:24px 0;' }, 'Could not load this post.'));
     return () => {};
   }
-
   postBox.innerHTML = '';
   if (!post) {
-    postBox.appendChild(el('p', { class: 'empty-state__text', style: 'padding:24px 0;' }, 'Post not found. It may have been deleted.'));
+    postBox.appendChild(el('p', { class: 'empty-state__text', style: 'padding:24px 0;' }, 'Post not found.'));
     return () => {};
   }
 
-  const built = buildPostCard(post, watermark);
-  postBox.appendChild(built.card);
+  const card = buildPostCard(post, watermark);
+  postBox.appendChild(card.card);
 
-  api.recordView(post.id).then(newCount => {
-    if (typeof newCount === 'number' && newCount > 0) {
-      const stats = built.card.querySelector('.post-card__stats');
-      updateReachDisplay(stats, newCount, { animate: true });
-    }
-  }).catch(() => {});
+  if (!isGuest) {
+    api.recordView(post.id).catch(() => {});
+  }
 
-  const reachTimer = startPostPolling(built.card, post.id);
+  const pollTimer = isGuest ? null : startPostPolling(card.card, post.id);
 
   let parentId = null;
   let renderedCount = 0;
@@ -59,50 +56,109 @@ export async function mount(root, params) {
       heading.textContent = `Comments (${comments.length})`;
       commentsEl.innerHTML = '';
 
+      // Build id → comment map
+      const byId = new Map(comments.map(c => [c.id, c]));
+
+      // Walk up to find the top-level root for any comment
+      function rootOf(c) {
+        let cur = c;
+        const seen = new Set();
+        while (cur.parent_id && !seen.has(cur.id)) {
+          seen.add(cur.id);
+          const p = byId.get(cur.parent_id);
+          if (!p) return cur;
+          cur = p;
+        }
+        return cur;
+      }
+
+      // Bucket every comment under its root, regardless of depth
       const byParent = new Map();
       const roots = [];
       for (const c of comments) {
-        if (!c.parent_id) roots.push(c);
-        else {
-          if (!byParent.has(c.parent_id)) byParent.set(c.parent_id, []);
-          byParent.get(c.parent_id).push(c);
+        const root = rootOf(c);
+        if (root.id === c.id) {
+          roots.push(c);
+        } else {
+          if (!byParent.has(root.id)) byParent.set(root.id, []);
+          byParent.get(root.id).push(c);
         }
       }
+
+      const visibleRoots = isGuest ? roots.slice(0, GUEST_COMMENT_LIMIT) : roots;
 
       const commentTpl = document.getElementById('tpl-comment');
       const renderOne = (c) => {
         const node = commentTpl.content.firstElementChild.cloneNode(true);
-        renderAvatar(node.querySelector('.avatar'), c.author_alias, 'sm');
-        node.querySelector('.comment__alias').textContent = c.author_alias;
+        node.dataset.commentId = c.id;
+
+        const isDeleted = c.is_deleted || c.content === '[deleted]';
+        const isMine = !isGuest && api.getSession()?.user_id === c.author_id;
+
+        node.querySelector('.comment__body').textContent = isDeleted ? '[deleted]' : c.content;
+        if (isDeleted) node.classList.add('is-deleted');
+        node.querySelector('.comment__alias').textContent = isDeleted ? '—' : c.author_alias;
         node.querySelector('.comment__time').textContent = timeAgo(c.created_at);
-        node.querySelector('.comment__body').textContent = c.content;
-        node.querySelector('[data-action="reply"]').addEventListener('click', () => {
-          if (!api.isAuthed()) return window.__anon.openSignup();
+
+        const replyBtn = node.querySelector('[data-action="reply"]');
+        if (isDeleted) replyBtn.remove();
+        else replyBtn.addEventListener('click', () => {
+          if (isGuest) return window.__anon.openSignup();
           parentId = c.id;
           replyInput.placeholder = `Replying to ${c.author_alias}…`;
           replyInput.focus();
         });
-        const replies = byParent.get(c.id) || [];
-        if (replies.length) {
-          const container = node.querySelector('[data-role="replies"]');
-          replies.forEach(r => container.appendChild(renderOne(r)));
-        } else {
-          const container = node.querySelector('[data-role="replies"]');
-          if (container) container.remove();
+
+        const moreBtn = node.querySelector('[data-action="comment-more"]');
+        if (moreBtn) {
+          if (isGuest || !isMine) moreBtn.remove();
+          else moreBtn.addEventListener('click', () => openCommentMenu(c, reloadComments));
         }
+
+        const replies = byParent.get(c.id) || [];
+        const container = node.querySelector('[data-role="replies"]');
+        if (replies.length) {
+          replies.forEach(r => container.appendChild(renderOne(r)));
+        } else if (container) {
+          container.remove();
+        }
+
         return node;
       };
 
-      roots.forEach(c => commentsEl.appendChild(renderOne(c)));
+      visibleRoots.forEach(c => commentsEl.appendChild(renderOne(c)));
+
       if (!comments.length) {
-        commentsEl.appendChild(el('p', { class: 'comments__empty' }, 'No comments yet. Be the first.'));
+        commentsEl.appendChild(el('p', { class: 'comments__empty' }, 'No comments yet.'));
+      } else if (isGuest && roots.length > GUEST_COMMENT_LIMIT) {
+        const wall = el('div', { class: 'comments__guest-wall' });
+        wall.appendChild(el('p', {}, 'Sign up to see all comments and reply.'));
+        const btn = el('button', { class: 'btn btn--primary btn--block', type: 'button' }, 'Enter Anonymous');
+        btn.addEventListener('click', () => window.__anon.openSignup());
+        wall.appendChild(btn);
+        commentsEl.appendChild(wall);
       }
     } catch (err) {
       console.error('[post.js] loadComments failed:', err);
     }
   }
 
+  async function reloadComments() {
+    renderedCount = 0;
+    await loadComments();
+  }
+
   await loadComments();
+
+  if (isGuest) {
+    replyForm.innerHTML = '';
+    const wall = el('div', { class: 'reply-bar__guest' });
+    const btn = el('button', { class: 'btn btn--primary btn--block', type: 'button' }, 'Sign up to reply');
+    btn.addEventListener('click', () => window.__anon.openSignup());
+    wall.appendChild(btn);
+    replyForm.appendChild(wall);
+    return () => { if (pollTimer) clearInterval(pollTimer); };
+  }
 
   const liveTimer = setInterval(async () => {
     if (document.hidden) return;
@@ -114,7 +170,6 @@ export async function mount(root, params) {
 
   replyForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!api.isAuthed()) return window.__anon.openSignup();
     const content = replyInput.value.trim();
     if (!content) return;
     replyInput.disabled = true;
@@ -123,9 +178,10 @@ export async function mount(root, params) {
       await api.createComment({ postId: post.id, parentId, content });
       parentId = null;
       replyInput.placeholder = 'Reply anonymously…';
-      await loadComments();
+      await reloadComments();
       post.comment_count = (post.comment_count || 0) + 1;
-      built.commentCountEl.textContent = post.comment_count;
+      const cc = card.commentCountEl;
+      if (cc) { cc.textContent = post.comment_count; cc.hidden = false; }
       haptic(8);
     } catch {
       toast('Reply failed.');
@@ -135,31 +191,10 @@ export async function mount(root, params) {
     }
   });
 
-  return () => { clearInterval(liveTimer); clearInterval(reachTimer); };
-}
-
-function updateReachDisplay(stats, reach, { animate = false } = {}) {
-  if (!stats) return;
-  const wasZero = Number(stats.dataset.reach || 0) === 0;
-  stats.hidden = reach === 0;
-  stats.classList.remove('post-card__reach--quiet', 'post-card__reach--warm', 'post-card__reach--hot');
-  const cls = reachClass(reach);
-  if (cls) stats.classList.add(cls);
-  const icon = stats.querySelector('.post-card__reach-icon use');
-  if (icon) icon.setAttribute('href', reach >= 500 ? '#i-flame' : '#i-eye');
-  const reachEl = stats.querySelector('.post-card__reach');
-  if (reachEl) {
-    reachEl.textContent = formatReach(reach);
-    if (animate && !wasZero) bumpEl(reachEl, 'post-card__reach--bump');
-  }
-  stats.dataset.reach = String(reach);
-}
-
-function bumpEl(node, className) {
-  if (!node) return;
-  node.classList.remove(className);
-  void node.offsetWidth;
-  node.classList.add(className);
+  return () => {
+    clearInterval(liveTimer);
+    if (pollTimer) clearInterval(pollTimer);
+  };
 }
 
 function startPostPolling(card, postId) {
@@ -169,23 +204,13 @@ function startPostPolling(card, postId) {
       const counts = await api.getPostCounts([postId]);
       const c = counts[postId];
       if (!c) return;
-
-      const stats = card.querySelector('.post-card__stats');
-      if (stats) {
-        const current = Number(stats.dataset.reach || 0);
-        if (c.view > current) updateReachDisplay(stats, c.view, { animate: true });
-      }
-
-      const voteCount = card.querySelector('[data-action="vote"] .post-card__count');
-      if (voteCount) {
-        const cur = Number(voteCount.textContent || 0);
-        if (c.upvote !== cur) { voteCount.textContent = c.upvote; if (c.upvote > cur) bumpEl(voteCount, 'count-bump'); }
-      }
-
-      const commentCount = card.querySelector('[data-action="open"] .post-card__count');
-      if (commentCount) {
-        const cur = Number(commentCount.textContent || 0);
-        if (c.comment > cur) { commentCount.textContent = c.comment; bumpEl(commentCount, 'count-bump'); }
+      const cc = card.querySelector('[data-action="open"] .post-card__count');
+      if (cc && c.comment > 0) {
+        const cur = Number(cc.textContent || 0);
+        if (c.comment > cur) {
+          cc.textContent = c.comment;
+          cc.hidden = false;
+        }
       }
     } catch {}
   }, 15000);
@@ -196,7 +221,6 @@ function renderMediaGrid(container, media, watermark) {
   container.innerHTML = '';
   container.classList.add('post-media');
   container.classList.add(media.length === 1 ? 'post-media--single' : 'post-media--double');
-
   const itemTpl = document.getElementById('tpl-post-media-item');
   media.slice(0, 2).forEach((m, i) => {
     const node = itemTpl.content.firstElementChild.cloneNode(true);
@@ -212,35 +236,24 @@ function renderMediaGrid(container, media, watermark) {
 function openLightbox(media, startIndex, watermark) {
   const existing = document.getElementById('photo-lightbox-root');
   if (existing) existing.remove();
-
-  const tpl = document.getElementById('tpl-photo-lightbox');
-  const box = tpl.content.firstElementChild.cloneNode(true);
+  const box = document.getElementById('tpl-photo-lightbox').content.firstElementChild.cloneNode(true);
   box.id = 'photo-lightbox-root';
-
   const imgEl   = box.querySelector('.photo-lightbox__img');
   const wmEl    = box.querySelector('.photo-lightbox__watermark');
   const prevBtn = box.querySelector('[data-action="prev"]');
   const nextBtn = box.querySelector('[data-action="next"]');
   const closeBtn = box.querySelector('[data-action="close"]');
-
   let idx = startIndex || 0;
-
   function show() {
     imgEl.src = buildMediaUrl(media[idx].path);
     wmEl.textContent = watermark;
     prevBtn.style.display = idx > 0 ? '' : 'none';
     nextBtn.style.display = idx < media.length - 1 ? '' : 'none';
   }
-
   prevBtn.addEventListener('click', (e) => { e.stopPropagation(); if (idx > 0) { idx--; show(); } });
   nextBtn.addEventListener('click', (e) => { e.stopPropagation(); if (idx < media.length - 1) { idx++; show(); } });
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); box.remove(); });
   box.addEventListener('click', (e) => { if (e.target === box) box.remove(); });
-
-  document.addEventListener('keydown', function esc(e) {
-    if (e.key === 'Escape') { box.remove(); document.removeEventListener('keydown', esc); }
-  });
-
   document.body.appendChild(box);
   show();
 }
@@ -251,14 +264,11 @@ function buildPostCard(post, watermark) {
   const node = document.getElementById(tplId).content.firstElementChild.cloneNode(true);
   node.dataset.postId = post.id;
 
-  renderAvatar(node.querySelector('.avatar'), post.author_alias);
   node.querySelector('.post-card__alias').textContent = post.author_alias;
   node.querySelector('.post-card__time').textContent = timeAgo(post.created_at);
   if (post.category && post.category !== 'General') {
-    node.querySelector('.post-card__category-dot').hidden = false;
     const cat = node.querySelector('.post-card__category');
-    cat.hidden = false;
-    cat.textContent = `#${post.category}`;
+    if (cat) { cat.hidden = false; cat.textContent = `#${post.category}`; }
   }
 
   const bodyEl = node.querySelector('.post-card__body');
@@ -272,50 +282,53 @@ function buildPostCard(post, watermark) {
     mediaWrap.remove();
   }
 
-  const teaser = node.querySelector('.post-card__teaser');
-  if (teaser) teaser.remove();
-
-  const stats = node.querySelector('.post-card__stats');
-  updateReachDisplay(stats, post.view_count || 0);
-
   if (isPoll) renderPoll(node.querySelector('[data-role="poll"]'), post.poll_data, post, node);
 
-  const voteBtn = node.querySelector('[data-action="vote"]');
+  const heatBtn = node.querySelector('[data-action="heat"]');
   const commentBtn = node.querySelector('[data-action="open"]');
   const shareBtn = node.querySelector('[data-action="share"]');
-  const voteCount = voteBtn.querySelector('.post-card__count');
   const commentCount = commentBtn.querySelector('.post-card__count');
-  voteCount.textContent = post.upvote_count ?? 0;
-  commentCount.textContent = post.comment_count ?? 0;
+
+  if (commentCount && post.comment_count > 0) {
+    commentCount.textContent = post.comment_count;
+    commentCount.hidden = false;
+  }
+
+  commentBtn.style.pointerEvents = 'none';
 
   let voted = false;
   if (api.isAuthed()) {
-    api.getMyVotes([post.id]).then(v => { voted = v.length > 0; if (voted) voteBtn.classList.add('is-liked'); }).catch(() => {});
+    api.getMyVotes([post.id]).then(v => {
+      voted = v.length > 0;
+      if (voted) heatBtn.classList.add('is-hot');
+    }).catch(() => {});
   }
 
   let voting = false;
-  voteBtn.addEventListener('click', async () => {
+  heatBtn.addEventListener('click', async () => {
     if (voting) return;
     if (!api.isAuthed()) return window.__anon.openSignup();
     voting = true;
-    haptic(6);
+    haptic(8);
     const wasVoted = voted;
-    voteBtn.classList.toggle('is-liked');
-    voteCount.textContent = Number(voteCount.textContent) + (wasVoted ? -1 : 1);
+    heatBtn.classList.toggle('is-hot');
+    if (!wasVoted) {
+      heatBtn.classList.remove('heat-bump');
+      void heatBtn.offsetWidth;
+      heatBtn.classList.add('heat-bump');
+    }
     try {
       await api.toggleVote(post.id, wasVoted);
       voted = !wasVoted;
     } catch {
-      voteBtn.classList.toggle('is-liked');
-      voteCount.textContent = Number(voteCount.textContent) + (wasVoted ? 1 : -1);
-      toast('Vote failed.');
+      heatBtn.classList.toggle('is-hot');
+      toast('Failed.');
     } finally { voting = false; }
   });
 
   shareBtn.addEventListener('click', () => sharePost(post));
-  commentBtn.style.pointerEvents = 'none';
 
-  const myUid = api.isAuthed() ? api.getSession()?.user_id : null;
+  const myUid = api.getSession()?.user_id;
   const isMine = myUid && myUid === post.author_id;
   const menu = node.querySelector('[data-action="more"]');
   if (menu) menu.addEventListener('click', () => {
@@ -333,7 +346,6 @@ function buildPostCard(post, watermark) {
     sheet.querySelector('[data-action="cancel"]').addEventListener('click', closeSheet);
     sheet.querySelector('[data-action="report"]').addEventListener('click', () => {
       closeSheet();
-      if (!api.isAuthed()) return window.__anon.openSignup();
       if (isMine) return toast("You can't report your own post.");
       openReport(post.id);
     });
@@ -346,10 +358,9 @@ function buildPostCard(post, watermark) {
 function renderPoll(box, data, post, card) {
   if (!box) return;
   box.innerHTML = '';
-  if (!data) { box.appendChild(el('div', { class: 'poll--fallback' }, 'Loading poll options…')); return; }
+  if (!data) { box.appendChild(el('div', { class: 'poll--fallback' }, 'Loading…')); return; }
   const options = data.options || [];
   if (!options.length) { box.appendChild(el('div', { class: 'poll--empty' }, 'No options yet')); return; }
-
   const total = data.total_votes || 0;
   const mine = data.my_option_id;
   const closed = data.closed;
@@ -387,6 +398,25 @@ function renderPoll(box, data, post, card) {
     meta.textContent = 'Tap to vote';
     box.appendChild(meta);
   }
+}
+
+function openCommentMenu(comment, onDelete) {
+  const tpl = document.getElementById('tpl-comment-more-sheet');
+  if (!tpl) return;
+  const node = tpl.content.firstElementChild.cloneNode(true);
+
+  node.querySelector('[data-action="delete-comment"]')?.addEventListener('click', async () => {
+    if (!confirm('Delete this comment? Replies to it will stay visible.')) return;
+    try {
+      await api.softDeleteComment(comment.id);
+      closeSheet();
+      toast('Comment deleted.');
+      onDelete();
+    } catch { toast('Delete failed.'); }
+  });
+
+  node.querySelector('[data-action="cancel"]').addEventListener('click', closeSheet);
+  openSheet(node);
 }
 
 function openReport(postId) {

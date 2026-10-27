@@ -2,6 +2,10 @@ import * as router from './router.js';
 import * as api from './api.js';
 import { el, openSheet, closeSheet, toast } from './ui.js';
 
+// ============================================================
+// AUTH SHEETS
+// ============================================================
+
 export function openSignup() {
   const tpl = document.getElementById('tpl-signup-sheet');
   const node = tpl.content.firstElementChild.cloneNode(true);
@@ -35,19 +39,35 @@ export function openSignup() {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const wantedAlias = alias.value.trim();
-    if (wantedAlias.length < 2 || wantedAlias.length > 24) return toast('Name must be 2–24 characters.');
+    if (wantedAlias.length < 2 || wantedAlias.length > 24) {
+      return toast('Alias must be 2–24 characters.');
+    }
 
     submit.disabled = true;
     const original = submit.textContent;
-    submit.textContent = 'Joining…';
+    submit.textContent = 'Entering…';
 
     try {
       const inviteOk = await api.checkInviteCode(invite.value.trim());
-      if (!inviteOk) { toast("That invite code didn't work."); submit.disabled = false; submit.textContent = original; return; }
+      if (!inviteOk) {
+        toast("That code didn't work.");
+        submit.disabled = false; submit.textContent = original;
+        return;
+      }
       const aliasOk = await api.checkAliasAvailable(wantedAlias);
-      if (!aliasOk) { toast('That name is taken or reserved.'); submit.disabled = false; submit.textContent = original; return; }
+      if (!aliasOk) {
+        toast('That alias is taken or reserved. Try another.');
+        submit.disabled = false; submit.textContent = original;
+        return;
+      }
 
-      await api.signUp({ alias: wantedAlias, email: email.value.trim(), password: pw.value, inviteCode: invite.value.trim(), agreed: agree.checked });
+      await api.signUp({
+        alias: wantedAlias,
+        email: email.value.trim(),
+        password: pw.value,
+        inviteCode: invite.value.trim(),
+        agreed: agree.checked,
+      });
       closeSheet();
       toast(`You're in, ${wantedAlias}.`);
       updateAuthUI();
@@ -56,8 +76,8 @@ export function openSignup() {
     } catch (err) {
       const msg = String(err.message || err).toLowerCase();
       if (msg.includes('already')) toast('That email is already registered.');
-      else if (msg.includes('invite')) toast("That invite code didn't work.");
-      else if (msg.includes('alias')) toast('That name is unavailable.');
+      else if (msg.includes('invite')) toast("That code didn't work.");
+      else if (msg.includes('alias')) toast('That alias is unavailable.');
       else toast('Signup failed. Try again.');
       submit.disabled = false; submit.textContent = original;
     }
@@ -110,6 +130,10 @@ export function openLogin() {
   setTimeout(() => email.focus(), 250);
 }
 
+// ============================================================
+// UI STATE
+// ============================================================
+
 export function updateAuthUI() {
   const btn = document.getElementById('header-join');
   if (btn) btn.hidden = api.isAuthed();
@@ -117,22 +141,67 @@ export function updateAuthUI() {
 
 async function refreshBadge() {
   const badge = document.getElementById('nav-badge');
-  if (!api.isAuthed()) {
-    if (badge) badge.hidden = true;
-    return;
-  }
+  if (!api.isAuthed()) { if (badge) badge.hidden = true; return; }
   try {
     const n = await api.getUnreadCount();
     if (badge) {
-      if (n > 0) { badge.textContent = n > 9 ? '9+' : n; badge.hidden = false; }
-      else badge.hidden = true;
+      if (n > 0) {
+        badge.textContent = n > 9 ? '9+' : n;
+        badge.hidden = false;
+      } else {
+        badge.hidden = true;
+      }
     }
   } catch {}
 }
 
+// ============================================================
+// LANDING PAGE (guest gate)
+// ============================================================
+
+function renderLanding() {
+  document.body.classList.add('on-landing');
+  const root = document.getElementById('view-root');
+  root.innerHTML = '';
+  const tpl = document.getElementById('tpl-landing');
+  if (!tpl) return;
+  const screen = tpl.content.firstElementChild.cloneNode(true);
+  root.appendChild(screen);
+}
+
+function guestGate() {
+  if (api.isAuthed()) return false;
+
+  const path = location.pathname;
+  const pParam = new URLSearchParams(location.search).get('p');
+
+  // Shared post link arriving via ?p=ID → rewrite to /p/ID, show the post
+  if (pParam) {
+    history.replaceState({}, '', `/p/${pParam}`);
+    return false;
+  }
+
+  // Shared post URL — guest can read
+  if (path.startsWith('/p/')) return false;
+
+  // Public legal/FAQ pages — guest can read
+  if (path === '/faq' || path === '/guidelines' || path === '/privacy') return false;
+
+  // Everything else → landing
+  renderLanding();
+  return true;
+}
+
+// ============================================================
+// GLOBAL CLICK DELEGATION
+// ============================================================
+
 document.addEventListener('click', (e) => {
   const join = e.target.closest('[data-action="join"]');
   if (join) { e.preventDefault(); openSignup(); return; }
+
+  const login = e.target.closest('[data-action="login"]');
+  if (login) { e.preventDefault(); openLogin(); return; }
 
   const compose = e.target.closest('[data-action="compose"]');
   if (compose) {
@@ -143,26 +212,40 @@ document.addEventListener('click', (e) => {
   }
 });
 
-router.register('/',                 async () => import('./views/feed.js'));
-router.register('/p/:id',            async () => import('./views/post.js'));
-router.register('/compose',          async () => import('./views/compose.js'));
-router.register('/activity',         async () => import('./views/activity.js'));
-router.register('/me',               async () => import('./views/me.js'));
-router.register('/discover',         async () => import('./views/discover.js'));
-router.register('/messages',         async () => import('./views/messages.js'));
-router.register('/ask/:shortcode',   async () => import('./views/ask.js'));
-router.register('/faq',              async () => import('./views/page.js'));
+// ============================================================
+// ROUTES
+// ============================================================
+
+router.register('/',          async () => import('./views/feed.js'));
+router.register('/p/:id',     async () => import('./views/post.js'));
+router.register('/compose',   async () => import('./views/compose.js'));
+router.register('/activity',  async () => import('./views/activity.js'));
+router.register('/me',        async () => import('./views/me.js'));
+router.register('/discover',  async () => import('./views/discover.js'));
+router.register('/faq',       async () => import('./views/page.js'));
+
+// ============================================================
+// BOOT
+// ============================================================
 
 window.__anon = { openSignup, openLogin, updateAuthUI, refreshBadge };
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
 }
 
+router.setGuard(guestGate);
 updateAuthUI();
 router.init();
+
 setInterval(refreshBadge, 60_000);
 setTimeout(refreshBadge, 500);
+
+// ============================================================
+// COOKIE BANNER
+// ============================================================
 
 (function cookieBanner() {
   if (localStorage.getItem('anon.cookies_ok')) return;

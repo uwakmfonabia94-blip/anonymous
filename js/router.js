@@ -1,5 +1,8 @@
 const routes = new Map();
 let currentCleanup = null;
+let guardFn = null;
+
+export function setGuard(fn) { guardFn = fn; }
 
 export function register(path, loader) {
   const keys = [];
@@ -27,14 +30,30 @@ export async function navigate(path, { replace = false } = {}) {
 }
 
 export async function render() {
+  // Guard runs first. It may render the landing page and return true,
+  // in which case we exit without touching anything else.
+  if (guardFn && guardFn()) return;
+
+  // Only reached if the guard let us through — remove the landing class
+  document.body.classList.remove('on-landing');
+
   const path = location.pathname;
   const m = match(path);
-  if (currentCleanup) { try { currentCleanup(); } catch {} currentCleanup = null; }
+
+  if (currentCleanup) {
+    try { currentCleanup(); } catch {}
+    currentCleanup = null;
+  }
 
   const root = document.getElementById('view-root');
-  if (!m) { location.replace('/'); return; }
+
+  if (!m) {
+    location.replace('/');
+    return;
+  }
 
   document.body.classList.toggle('on-compose', path === '/compose');
+
   document.querySelectorAll('.bottom-nav__item').forEach(el => el.classList.remove('is-active'));
   const routeName = path === '/' ? 'home' : path.split('/')[1];
   const activeItem = document.querySelector(`.bottom-nav__item[data-route="${routeName}"]`);
@@ -51,6 +70,7 @@ export async function render() {
 
 export function init() {
   window.addEventListener('popstate', render);
+
   document.addEventListener('click', (e) => {
     const a = e.target.closest('a[href]');
     if (!a) return;
@@ -58,10 +78,10 @@ export function init() {
     if (!href || !href.startsWith('/') || href.startsWith('//')) return;
     if (a.target === '_blank') return;
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-    // let real HTML pages (guidelines/privacy) load normally
-    if (href === '/guidelines' || href === '/privacy' || href === '/faq' && false) return;
+    if (href === '/guidelines' || href === '/privacy') return;
     e.preventDefault();
     navigate(href);
   });
+
   render();
 }

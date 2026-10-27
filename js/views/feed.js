@@ -1,6 +1,5 @@
 import * as api from '../api.js';
-import { timeAgo, renderAvatar, el, toast, sharePost, haptic,
-         formatReach, reachClass, openSheet, closeSheet } from '../ui.js';
+import { timeAgo, el, toast, sharePost, haptic, openSheet, closeSheet } from '../ui.js';
 import { buildMediaUrl, buildViewerWatermark } from '../media.js';
 
 const DAILY_PROMPTS = {
@@ -14,25 +13,21 @@ const DAILY_PROMPTS = {
 };
 
 const VIEWED_KEY = 'anon.viewedPosts';
-const GUEST_LIMIT = 5;
-
 function getViewedSet() {
   try { return new Set(JSON.parse(sessionStorage.getItem(VIEWED_KEY) || '[]')); }
   catch { return new Set(); }
 }
-function markViewed(postId) {
-  const set = getViewedSet();
-  set.add(postId);
-  sessionStorage.setItem(VIEWED_KEY, JSON.stringify([...set]));
+function markViewed(id) {
+  const s = getViewedSet(); s.add(id);
+  sessionStorage.setItem(VIEWED_KEY, JSON.stringify([...s]));
 }
 
 function getDailyPrompt() { return DAILY_PROMPTS[new Date().getDay()]; }
 
 function classifyPost(post, myUid) {
   const classes = [];
-  if (post.media && post.media.length > 0) {
-    classes.push('post-card--photo');
-  } else if (post.content) {
+  if (post.media && post.media.length > 0) classes.push('post-card--photo');
+  else if (post.content) {
     const trimmed = post.content.trim();
     const isQuote = trimmed.length > 10 && (
       (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
@@ -65,10 +60,8 @@ export async function mount(root) {
   const justPostedId = sessionStorage.getItem('anon.justPosted');
   sessionStorage.removeItem('anon.justPosted');
 
-  const isGuest = !api.isAuthed();
-
   let viewerAlias = api.getCachedAlias();
-  if (!viewerAlias && api.isAuthed()) viewerAlias = await api.ensureAliasCached().catch(() => null);
+  if (!viewerAlias) viewerAlias = await api.ensureAliasCached().catch(() => null);
   const watermark = buildViewerWatermark(viewerAlias);
 
   const skeletonTpl = document.getElementById('tpl-skeleton-card');
@@ -80,38 +73,30 @@ export async function mount(root) {
   } catch (err) {
     console.error('[feed] load failed:', err);
     feed.innerHTML = '';
-    feed.appendChild(el('p', { class: 'empty-state__text' }, 'Could not load feed. Pull down to retry.'));
+    feed.appendChild(el('p', { class: 'empty-state__text' }, 'Could not load feed.'));
     return;
   }
 
-  // CRITICAL FIX: if a post was just created and isn't in the feed response
-  // (race condition or ranking exclusion), fetch it and force it to the top.
   if (justPostedId && !posts.some(p => p.id === justPostedId)) {
     try {
       const myPost = await api.getPostFull(justPostedId);
       if (myPost) posts.unshift(myPost);
-    } catch (err) {
-      console.warn('[feed] could not fetch just-posted post:', err);
-    }
+    } catch {}
   }
 
   feed.innerHTML = '';
-  showRecapIfNeeded();
-  const newPostsBar = mountNewPostsBar(screen);
 
   if (!posts.length) {
     feed.appendChild(document.getElementById('tpl-empty').content.firstElementChild.cloneNode(true));
-    return () => clearInterval(newPostsBar.interval);
+    return;
   }
 
   let myVotes = new Set();
-  if (api.isAuthed()) {
-    try {
-      const v = await api.getMyVotes(posts.map(p => p.id));
-      myVotes = new Set(v.map(r => r.post_id));
-    } catch {}
-  }
-  const myUid = api.isAuthed() ? api.getSession()?.user_id : null;
+  try {
+    const v = await api.getMyVotes(posts.map(p => p.id));
+    myVotes = new Set(v.map(r => r.post_id));
+  } catch {}
+  const myUid = api.getSession()?.user_id;
 
   const viewedSet = getViewedSet();
   const viewObserver = new IntersectionObserver((entries) => {
@@ -120,60 +105,31 @@ export async function mount(root) {
       const card = entry.target;
       const postId = card.dataset.postId;
       if (!postId || viewedSet.has(postId)) return;
-
       setTimeout(async () => {
         if (!card.isConnected) return;
         if (viewedSet.has(postId)) return;
         viewedSet.add(postId);
         markViewed(postId);
-        try {
-          const newCount = await api.recordView(postId);
-          if (typeof newCount === 'number' && newCount > 0) {
-            const stats = card.querySelector('.post-card__stats');
-            updateReachDisplay(stats, newCount, { animate: true });
-          }
-        } catch {}
+        api.recordView(postId).catch(() => {});
       }, 1000);
-
       viewObserver.unobserve(card);
     });
   }, { threshold: 0.5 });
-
-  const observeCard = (card) => viewObserver.observe(card);
-
-  let renderedCount = 0;
-  let landedElement = null;
 
   const appendPosts = (list) => {
     for (const post of list) {
       const card = renderPostCard(post, { myVotes, myUid, watermark });
       feed.appendChild(card);
-      observeCard(card);
-      renderedCount++;
-      if (post.id === justPostedId) {
-        card.classList.add('post-card--landed');
-        landedElement = card;
-        setTimeout(() => card.classList.remove('post-card--landed'), 1600);
-      }
+      viewObserver.observe(card);
     }
   };
 
-  // CRITICAL FIX: cap visible posts for guests
-  const visiblePosts = isGuest ? posts.slice(0, GUEST_LIMIT) : posts;
-  appendPosts(visiblePosts);
-
-  if (landedElement) window.scrollTo({ top: 0, behavior: 'smooth' });
-
-  // CRITICAL FIX: guest soft wall, and no more posts for guests
-  if (isGuest) {
-    feed.appendChild(document.getElementById('tpl-soft-wall').content.firstElementChild.cloneNode(true));
-  }
+  appendPosts(posts);
 
   const reachTimer = startReachPolling(feed);
 
-  // CRITICAL FIX: disable infinite scroll for guests
   let loading = false;
-  let done = isGuest;
+  let done = false;
   const scrollObserver = new IntersectionObserver(async (entries) => {
     if (!entries[0].isIntersecting || loading || done) return;
     loading = true;
@@ -181,47 +137,20 @@ export async function mount(root) {
       const more = await api.listFeed({ limit: 20, offset: posts.length });
       if (!more.length) { done = true; return; }
       posts = posts.concat(more);
-      if (api.isAuthed()) {
-        try {
-          const v = await api.getMyVotes(more.map(p => p.id));
-          v.forEach(r => myVotes.add(r.post_id));
-        } catch {}
-      }
+      try {
+        const v = await api.getMyVotes(more.map(p => p.id));
+        v.forEach(r => myVotes.add(r.post_id));
+      } catch {}
       appendPosts(more);
     } catch {} finally { loading = false; }
   }, { rootMargin: '200px' });
-  if (!isGuest) scrollObserver.observe(sentinel);
+  scrollObserver.observe(sentinel);
 
   return () => {
     scrollObserver.disconnect();
     viewObserver.disconnect();
-    clearInterval(newPostsBar.interval);
     clearInterval(reachTimer);
   };
-}
-
-function updateReachDisplay(stats, reach, { animate = false } = {}) {
-  if (!stats) return;
-  const wasZero = Number(stats.dataset.reach || 0) === 0;
-  stats.hidden = reach === 0;
-  stats.classList.remove('post-card__reach--quiet', 'post-card__reach--warm', 'post-card__reach--hot');
-  const cls = reachClass(reach);
-  if (cls) stats.classList.add(cls);
-  const icon = stats.querySelector('.post-card__reach-icon use');
-  if (icon) icon.setAttribute('href', reach >= 500 ? '#i-flame' : '#i-eye');
-  const reachEl = stats.querySelector('.post-card__reach');
-  if (reachEl) {
-    reachEl.textContent = formatReach(reach);
-    if (animate && !wasZero) bumpEl(reachEl, 'post-card__reach--bump');
-  }
-  stats.dataset.reach = String(reach);
-}
-
-function bumpEl(node, className) {
-  if (!node) return;
-  node.classList.remove(className);
-  void node.offsetWidth;
-  node.classList.add(className);
 }
 
 function startReachPolling(feed) {
@@ -236,27 +165,25 @@ function startReachPolling(feed) {
       for (const card of cards) {
         const c = counts[card.dataset.postId];
         if (!c) continue;
-
-        const stats = card.querySelector('.post-card__stats');
-        if (stats) {
-          const current = Number(stats.dataset.reach || 0);
-          if (c.view > current) updateReachDisplay(stats, c.view, { animate: true });
-        }
-
-        const voteBtn = card.querySelector('[data-action="vote"] .post-card__count');
-        if (voteBtn) {
-          const cur = Number(voteBtn.textContent || 0);
-          if (c.upvote > cur) { voteBtn.textContent = c.upvote; bumpEl(voteBtn, 'count-bump'); }
-        }
-
-        const commentBtn = card.querySelector('[data-action="open"] .post-card__count');
-        if (commentBtn) {
-          const cur = Number(commentBtn.textContent || 0);
-          if (c.comment > cur) { commentBtn.textContent = c.comment; bumpEl(commentBtn, 'count-bump'); }
+        const cc = card.querySelector('[data-action="open"] .post-card__count');
+        if (cc && c.comment > 0) {
+          const cur = Number(cc.textContent || 0);
+          if (c.comment > cur) {
+            cc.textContent = c.comment;
+            cc.hidden = false;
+            bumpEl(cc, 'count-bump');
+          }
         }
       }
     } catch {}
   }, 30000);
+}
+
+function bumpEl(node, className) {
+  if (!node) return;
+  node.classList.remove(className);
+  void node.offsetWidth;
+  node.classList.add(className);
 }
 
 function renderMediaGrid(container, media, watermark, onOpen) {
@@ -264,7 +191,6 @@ function renderMediaGrid(container, media, watermark, onOpen) {
   container.innerHTML = '';
   container.classList.add('post-media');
   container.classList.add(media.length === 1 ? 'post-media--single' : 'post-media--double');
-
   const itemTpl = document.getElementById('tpl-post-media-item');
   media.slice(0, 2).forEach((m, i) => {
     const node = itemTpl.content.firstElementChild.cloneNode(true);
@@ -284,57 +210,41 @@ function renderMediaGrid(container, media, watermark, onOpen) {
 function openLightbox(media, startIndex, watermark) {
   const existing = document.getElementById('photo-lightbox-root');
   if (existing) existing.remove();
-
-  const tpl = document.getElementById('tpl-photo-lightbox');
-  const box = tpl.content.firstElementChild.cloneNode(true);
+  const box = document.getElementById('tpl-photo-lightbox').content.firstElementChild.cloneNode(true);
   box.id = 'photo-lightbox-root';
-
   const imgEl   = box.querySelector('.photo-lightbox__img');
   const wmEl    = box.querySelector('.photo-lightbox__watermark');
   const prevBtn = box.querySelector('[data-action="prev"]');
   const nextBtn = box.querySelector('[data-action="next"]');
   const closeBtn = box.querySelector('[data-action="close"]');
-
   let idx = startIndex || 0;
-
   function show() {
-    const m = media[idx];
-    imgEl.src = buildMediaUrl(m.path);
+    imgEl.src = buildMediaUrl(media[idx].path);
     wmEl.textContent = watermark;
     prevBtn.style.display = idx > 0 ? '' : 'none';
     nextBtn.style.display = idx < media.length - 1 ? '' : 'none';
   }
-
   prevBtn.addEventListener('click', (e) => { e.stopPropagation(); if (idx > 0) { idx--; show(); } });
   nextBtn.addEventListener('click', (e) => { e.stopPropagation(); if (idx < media.length - 1) { idx++; show(); } });
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); box.remove(); });
   box.addEventListener('click', (e) => { if (e.target === box) box.remove(); });
-
-  document.addEventListener('keydown', function esc(e) {
-    if (e.key === 'Escape') { box.remove(); document.removeEventListener('keydown', esc); }
-  });
-
   document.body.appendChild(box);
   show();
 }
 
-function renderPostCard(post, { isHot = false, myVotes, myUid, watermark }) {
+function renderPostCard(post, { myVotes, myUid, watermark }) {
   const isPoll = post.type === 'poll';
-  const tplId = isPoll ? 'tpl-poll-card' : (isHot ? 'tpl-hot-post' : 'tpl-post-card');
+  const tplId = isPoll ? 'tpl-poll-card' : 'tpl-post-card';
   const card = document.getElementById(tplId).content.firstElementChild.cloneNode(true);
   card.dataset.postId = post.id;
 
   classifyPost(post, myUid).forEach(c => card.classList.add(c));
 
-  renderAvatar(card.querySelector('.avatar'), post.author_alias);
   card.querySelector('.post-card__alias').textContent = post.author_alias;
   card.querySelector('.post-card__time').textContent = timeAgo(post.created_at);
-
   if (post.category && post.category !== 'General') {
-    card.querySelector('.post-card__category-dot').hidden = false;
     const cat = card.querySelector('.post-card__category');
-    cat.hidden = false;
-    cat.textContent = `#${post.category}`;
+    if (cat) { cat.hidden = false; cat.textContent = `#${post.category}`; }
   }
 
   const bodyEl = card.querySelector('.post-card__body');
@@ -348,47 +258,40 @@ function renderPostCard(post, { isHot = false, myVotes, myUid, watermark }) {
     mediaWrap.remove();
   }
 
-  const teaser = card.querySelector('.post-card__teaser');
-  if (teaser && post.top_comment_text) {
-    teaser.hidden = false;
-    teaser.querySelector('.post-card__teaser__author').textContent =
-      post.top_comment_alias ? `${post.top_comment_alias}:` : '';
-    teaser.querySelector('.post-card__teaser__text').textContent =
-      post.top_comment_text.length > 120 ? post.top_comment_text.slice(0, 117) + '…' : post.top_comment_text;
-  }
-
-  const stats = card.querySelector('.post-card__stats');
-  updateReachDisplay(stats, post.view_count || 0);
-
   if (isPoll) renderPoll(card.querySelector('[data-role="poll"]'), post.poll_data, post, card);
 
-  const voteBtn    = card.querySelector('[data-action="vote"]');
+  const heatBtn    = card.querySelector('[data-action="heat"]');
   const commentBtn = card.querySelector('[data-action="open"]');
   const shareBtn   = card.querySelector('[data-action="share"]');
+  const commentCount = commentBtn.querySelector('.post-card__count');
 
-  voteBtn.querySelector('.post-card__count').textContent = post.upvote_count ?? 0;
-  commentBtn.querySelector('.post-card__count').textContent = post.comment_count ?? 0;
-  if (myVotes?.has(post.id)) voteBtn.classList.add('is-liked');
+  if (commentCount && post.comment_count > 0) {
+    commentCount.textContent = post.comment_count;
+    commentCount.hidden = false;
+  }
+
+  if (myVotes?.has(post.id)) heatBtn.classList.add('is-hot');
 
   let voting = false;
-  voteBtn.addEventListener('click', async (e) => {
+  heatBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
     if (voting) return;
-    if (!api.isAuthed()) return window.__anon.openSignup();
+    if (!api.isAuthed()) return;
     voting = true;
-    haptic(6);
+    haptic(8);
     const wasVoted = myVotes.has(post.id);
-    voteBtn.classList.toggle('is-liked');
-    const c = voteBtn.querySelector('.post-card__count');
-    c.textContent = Number(c.textContent) + (wasVoted ? -1 : 1);
+    heatBtn.classList.toggle('is-hot');
+    if (!wasVoted) {
+      heatBtn.classList.remove('heat-bump');
+      void heatBtn.offsetWidth;
+      heatBtn.classList.add('heat-bump');
+    }
     try {
       await api.toggleVote(post.id, wasVoted);
       if (wasVoted) myVotes.delete(post.id); else myVotes.add(post.id);
-      if (!getViewedSet().has(post.id)) { markViewed(post.id); api.recordView(post.id).catch(() => {}); }
     } catch {
-      voteBtn.classList.toggle('is-liked');
-      c.textContent = Number(c.textContent) + (wasVoted ? 1 : -1);
-      toast('Vote failed.');
+      heatBtn.classList.toggle('is-hot');
+      toast('Failed.');
     } finally { voting = false; }
   });
 
@@ -412,7 +315,6 @@ function renderPoll(box, data, post, card) {
   if (!data) { box.appendChild(el('div', { class: 'poll--fallback' }, 'Tap to view poll')); return; }
   const options = data.options || [];
   if (!options.length) { box.appendChild(el('div', { class: 'poll--empty' }, 'No options yet')); return; }
-
   const total = data.total_votes || 0;
   const mine = data.my_option_id;
   const closed = data.closed;
@@ -437,7 +339,7 @@ function renderPoll(box, data, post, card) {
       row.querySelector('.poll-option__label').textContent = opt.label;
       row.addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (!api.isAuthed()) return window.__anon.openSignup();
+        if (!api.isAuthed()) return;
         try {
           await api.votePoll(post.id, opt.option_id);
           haptic(6);
@@ -472,7 +374,6 @@ function openMoreMenu(post, card, myUid) {
   node.querySelector('[data-action="cancel"]').addEventListener('click', closeSheet);
   node.querySelector('[data-action="report"]').addEventListener('click', () => {
     closeSheet();
-    if (!api.isAuthed()) return window.__anon.openSignup();
     if (isMine) return toast("You can't report your own post.");
     openReport(post.id);
   });
@@ -491,56 +392,4 @@ function openReport(postId) {
   });
   node.querySelector('[data-action="cancel"]').addEventListener('click', closeSheet);
   openSheet(node);
-}
-
-async function showRecapIfNeeded() {
-  if (!api.isAuthed()) return;
-  const lastVisit = localStorage.getItem('anon.lastVisit');
-  const now = Date.now();
-  if (lastVisit) {
-    const gapHours = (now - Number(lastVisit)) / (1000 * 60 * 60);
-    if (gapHours >= 4) {
-      try {
-        const recap = await api.myRecapSince(new Date(Number(lastVisit)).toISOString());
-        const total = (recap.new_replies || 0) + (recap.new_upvotes || 0);
-        if (total > 0 || (recap.new_posts || 0) > 5) setTimeout(() => presentRecapModal(recap), 600);
-      } catch {}
-    }
-  }
-  localStorage.setItem('anon.lastVisit', String(now));
-}
-
-function presentRecapModal(recap) {
-  const node = document.getElementById('tpl-recap-modal').content.firstElementChild.cloneNode(true);
-  node.querySelector('[data-role="replies"] .recap-item__count').textContent = recap.new_replies || 0;
-  node.querySelector('[data-role="upvotes"] .recap-item__count').textContent = recap.new_upvotes || 0;
-  node.querySelector('[data-role="posts"]   .recap-item__count').textContent = recap.new_posts   || 0;
-  node.querySelector('[data-action="dismiss"]').addEventListener('click', () => {
-    closeSheet();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
-  openSheet(node);
-}
-
-function mountNewPostsBar(screen) {
-  const bar = document.getElementById('tpl-new-posts-bar').content.firstElementChild.cloneNode(true);
-  bar.hidden = true;
-  screen.insertBefore(bar, screen.querySelector('[data-role="feed"]'));
-  const renderedAt = new Date().toISOString();
-  const textEl = bar.querySelector('.new-posts-bar__text');
-  bar.addEventListener('click', () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    import('../router.js').then(r => r.render());
-  });
-  const interval = setInterval(async () => {
-    if (document.hidden) return;
-    try {
-      const n = await api.countNewPostsSince(renderedAt);
-      if (n > 0) {
-        bar.hidden = false;
-        textEl.textContent = `${n} new ${n === 1 ? 'post' : 'posts'}`;
-      }
-    } catch {}
-  }, 60000);
-  return { interval };
 }

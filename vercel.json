@@ -22,7 +22,6 @@
   ],
   "rewrites": [
     { "source": "/p/:id", "destination": "/api/og?id=:id" },
-    { "source": "/ask/:shortcode", "destination": "/index.html" },
     { "source": "/((?!api/|js/|css/|admin|.*\\.).*)", "destination": "/index.html" }
   ]
 }

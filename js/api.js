@@ -3,8 +3,6 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY, detectUniversity } from './config.js';
 const SESSION_KEY = 'anon.session';
 export const universitySlug = detectUniversity();
 
-// ---------- SESSION ----------
-
 export function getSession() {
   try { const r = localStorage.getItem(SESSION_KEY); return r ? JSON.parse(r) : null; }
   catch { return null; }
@@ -74,8 +72,6 @@ const rpc     = (name, args) => publicFetch(`/rest/v1/rpc/${name}`, { method: 'P
 const authRpc = (name, args) => authFetch(`/rest/v1/rpc/${name}`, { method: 'POST', body: JSON.stringify(args) });
 const rpcAuto = (name, args) => isAuthed() ? authRpc(name, args) : rpc(name, args);
 
-// ---------- AUTH ----------
-
 export async function signUp({ email, password, inviteCode, agreed, alias }) {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
     method: 'POST', headers: headers(),
@@ -117,8 +113,6 @@ export async function signOut() {
   setSession(null);
 }
 
-// ---------- UNIVERSITY ----------
-
 let _uniId = null;
 export async function universityId() {
   if (_uniId) return _uniId;
@@ -131,8 +125,6 @@ export async function universityId() {
 export const checkInviteCode     = (code)  => rpc('check_invite_code',     { p_code: code });
 export const checkAliasAvailable = (alias) => rpc('check_alias_available', { p_alias: alias });
 
-// ---------- VIEWER KEY ----------
-
 export function getViewerKey() {
   if (isAuthed()) return getSession().user_id;
   let k = localStorage.getItem('anon.viewer_key');
@@ -143,23 +135,6 @@ export function getViewerKey() {
   }
   return k;
 }
-
-// ---------- PRESENCE ----------
-
-export async function updatePresence() {
-  if (!isAuthed()) return;
-  try {
-    await authFetch('/rest/v1/rpc/update_presence', { method: 'POST', body: '{}' });
-  } catch {}
-}
-
-export async function getActiveCount() {
-  try {
-    return await publicFetch('/rest/v1/rpc/get_active_count', { method: 'POST', body: '{}' });
-  } catch { return 0; }
-}
-
-// ---------- FEED ----------
 
 export const listFeed = async ({ limit = 20, offset = 0, category = null } = {}) =>
   rpcAuto('feed_posts', {
@@ -192,8 +167,6 @@ export async function myRecapSince(since) {
   } catch { return { new_replies: 0, new_upvotes: 0, new_posts: 0 }; }
 }
 
-// ---------- VIEWS ----------
-
 export async function recordView(postId) {
   try {
     return await publicFetch('/rest/v1/rpc/record_view', {
@@ -202,8 +175,6 @@ export async function recordView(postId) {
     });
   } catch { return 0; }
 }
-
-// ---------- POST COUNTS ----------
 
 export async function getPostCounts(postIds) {
   if (!postIds?.length) return {};
@@ -222,8 +193,6 @@ export async function getPostCounts(postIds) {
   } catch { return {}; }
 }
 
-// ---------- SINGLE POST ----------
-
 export async function getPostFull(id) {
   try {
     const rows = await rpcAuto('get_post_full', { p_id: id });
@@ -231,14 +200,12 @@ export async function getPostFull(id) {
   } catch (err) {
     console.warn('[getPostFull] RPC failed, falling back to REST:', err.message || err);
   }
-
   try {
     const rows = await publicFetch(
       `/rest/v1/posts?id=eq.${id}&select=id,content,category,shareable,created_at,view_count,type,author_id,author:profiles!author_id(alias)`
     );
     const p = rows?.[0];
     if (!p) return null;
-
     let upvote_count = 0, comment_count = 0, poll_data = null, media = [];
     try {
       const v = await publicFetch(`/rest/v1/upvotes?post_id=eq.${id}&select=user_id`);
@@ -257,11 +224,8 @@ export async function getPostFull(id) {
       }));
     } catch {}
     if (p.type === 'poll') {
-      try {
-        poll_data = await rpcAuto('get_poll_results', { p_post_id: id });
-      } catch {}
+      try { poll_data = await rpcAuto('get_poll_results', { p_post_id: id }); } catch {}
     }
-
     return {
       id: p.id, content: p.content, category: p.category, shareable: p.shareable,
       created_at: p.created_at, author_id: p.author_id,
@@ -275,8 +239,6 @@ export async function getPostFull(id) {
   }
 }
 
-// ---------- COMMENTS ----------
-
 export async function listComments(postId) {
   try {
     return await rpc('post_comments', { p_post_id: postId });
@@ -284,12 +246,13 @@ export async function listComments(postId) {
     console.warn('[listComments] RPC failed, falling back to REST:', err.message || err);
     try {
       const rows = await publicFetch(
-        `/rest/v1/comments?post_id=eq.${postId}&select=id,post_id,parent_id,content,created_at,author_id,author:profiles!author_id(alias)&order=created_at.asc`
+        `/rest/v1/comments?post_id=eq.${postId}&select=id,post_id,parent_id,content,created_at,author_id,is_deleted,author:profiles!author_id(alias)&order=created_at.asc`
       );
       return (rows || []).map(c => ({
         id: c.id, post_id: c.post_id, parent_id: c.parent_id,
         content: c.content, created_at: c.created_at,
         author_id: c.author_id, author_alias: c.author?.alias || 'Unknown',
+        is_deleted: c.is_deleted || false,
       }));
     } catch { return []; }
   }
@@ -306,7 +269,9 @@ export async function createComment({ postId, parentId = null, content }) {
   return rows?.[0];
 }
 
-// ---------- POSTS ----------
+export async function softDeleteComment(commentId) {
+  await authRpc('soft_delete_comment', { p_comment_id: commentId });
+}
 
 export async function createPost({ content, category = 'General', shareable = true }) {
   const rows = await authFetch(`/rest/v1/posts`, {
@@ -323,13 +288,9 @@ export async function deletePost(postId) {
   await authFetch(`/rest/v1/posts?id=eq.${postId}`, { method: 'DELETE' });
 }
 
-// ---------- POLLS ----------
-
 export async function createPoll({ question, options, category = 'General' }) {
   return await authRpc('create_poll', {
-    p_question: question,
-    p_options: options,
-    p_category: category,
+    p_question: question, p_options: options, p_category: category,
   });
 }
 
@@ -338,27 +299,20 @@ export async function votePoll(postId, optionId) {
 }
 
 export async function getPollResults(postId) {
-  try {
-    return await rpcAuto('get_poll_results', { p_post_id: postId });
-  } catch { return null; }
+  try { return await rpcAuto('get_poll_results', { p_post_id: postId }); }
+  catch { return null; }
 }
-
-// ---------- VOTES ----------
 
 export async function toggleVote(postId, currentlyVoted) {
   const uid = getSession().user_id;
   if (currentlyVoted) {
     try {
       await authFetch(`/rest/v1/upvotes?post_id=eq.${postId}&user_id=eq.${uid}`, { method: 'DELETE' });
-    } catch (e) {
-      if (e.status === 404) return;
-      throw e;
-    }
+    } catch (e) { if (e.status === 404) return; throw e; }
   } else {
     try {
       await authFetch(`/rest/v1/upvotes`, {
-        method: 'POST',
-        body: JSON.stringify([{ post_id: postId, user_id: uid }]),
+        method: 'POST', body: JSON.stringify([{ post_id: postId, user_id: uid }]),
       });
     } catch (e) {
       const msg = String(e.message || e);
@@ -376,8 +330,6 @@ export async function getMyVotes(postIds) {
     return await authFetch(`/rest/v1/upvotes?user_id=eq.${uid}&post_id=in.(${list})&select=post_id`) || [];
   } catch { return []; }
 }
-
-// ---------- ACTIVITY ----------
 
 export const listActivity = () =>
   authFetch(`/rest/v1/activity?select=*&order=created_at.desc&limit=50`);
@@ -398,8 +350,6 @@ export async function getUnreadCount() {
   return rows?.length || 0;
 }
 
-// ---------- PROFILE ----------
-
 export async function getProfile() {
   const uid = getSession().user_id;
   const rows = await authFetch(`/rest/v1/profiles?id=eq.${uid}&select=*`);
@@ -409,8 +359,7 @@ export async function getProfile() {
 export async function updateAlias(newAlias) {
   const uid = getSession().user_id;
   await authFetch(`/rest/v1/profiles?id=eq.${uid}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ alias: newAlias.trim() }),
+    method: 'PATCH', body: JSON.stringify({ alias: newAlias.trim() }),
   });
   return newAlias.trim();
 }
@@ -419,8 +368,6 @@ export async function deleteAccount() {
   await authRpc('delete_my_account', {});
   setSession(null);
 }
-
-// ---------- REPORTS ----------
 
 export async function createReport({ postId, commentId, reason }) {
   await authFetch(`/rest/v1/reports`, {
@@ -434,40 +381,16 @@ export async function createReport({ postId, commentId, reason }) {
   });
 }
 
-// ---------- COUNTS ----------
-
 export async function countMyPosts() {
   const uid = getSession().user_id;
   const rows = await authFetch(`/rest/v1/posts?author_id=eq.${uid}&select=id`);
   return rows?.length || 0;
 }
 
-export async function countMyComments() {
+export async function listMyPosts() {
   const uid = getSession().user_id;
-  const rows = await authFetch(`/rest/v1/comments?author_id=eq.${uid}&select=id`);
-  return rows?.length || 0;
+  return authFetch(`/rest/v1/posts?author_id=eq.${uid}&order=created_at.desc&select=id,content,created_at,view_count`);
 }
-
-// ---------- ME DASHBOARD ----------
-
-export async function myStatsThisWeek() {
-  try { const rows = await authRpc('my_stats_this_week', {}); return rows?.[0] || null; }
-  catch { return null; }
-}
-export async function myBestPost() {
-  try { const rows = await authRpc('my_best_post', {}); return rows?.[0] || null; }
-  catch { return null; }
-}
-export async function campusGoalProgress() {
-  try { const rows = await authRpc('campus_goal_progress', {}); return rows?.[0] || null; }
-  catch { return null; }
-}
-export async function myMilestones() {
-  try { const result = await authRpc('my_milestones', {}); return Array.isArray(result) ? result : []; }
-  catch { return []; }
-}
-
-// ---------- PHOTO MEDIA ----------
 
 export async function uploadMediaBlob(blob, path) {
   const s = getSession();
@@ -503,19 +426,12 @@ export async function deleteMediaBlob(path) {
 
 export async function insertPostMedia({ postId, path, width, height, position }) {
   await authFetch(`/rest/v1/post_media`, {
-    method: 'POST',
-    headers: { Prefer: 'return=representation' },
+    method: 'POST', headers: { Prefer: 'return=representation' },
     body: JSON.stringify([{
-      post_id: postId,
-      storage_path: path,
-      width,
-      height,
-      position,
+      post_id: postId, storage_path: path, width, height, position,
     }]),
   });
 }
-
-// ---------- ALIAS CACHE ----------
 
 export function getCachedAlias() {
   const s = getSession();
@@ -535,42 +451,4 @@ export async function ensureAliasCached() {
     }
   } catch {}
   return null;
-}
-
-// ---------- ANONYMOUS MESSAGES ----------
-
-export const getAskTarget       = (shortcode) => publicFetch('/rest/v1/rpc/get_ask_target', {
-  method: 'POST', body: JSON.stringify({ p_shortcode: shortcode }),
-});
-export const getMyAskLink       = ()          => authRpc('get_my_ask_link', {});
-export const sendAnonymousMessage = (shortcode, content) =>
-  authRpc('send_anonymous_message', { p_shortcode: shortcode, p_content: content });
-export const listMyMessages     = ()          => authRpc('list_my_messages', {});
-export const markMessageRead    = (id)        => authRpc('mark_message_read', { p_message_id: id });
-export const blockMessageSender = (id)        => authRpc('block_message_sender', { p_message_id: id });
-export const reportMessage      = (id, reason)=> authRpc('report_message', { p_message_id: id, p_reason: reason });
-export const deleteMyMessage    = (id)        => authRpc('delete_my_message', { p_message_id: id });
-export const replyPubliclyToMessage = (id, reply) =>
-  authRpc('reply_publicly_to_message', { p_message_id: id, p_reply: reply });
-export const getUnreadMessageCount = ()       => authRpc('get_unread_message_count', {});
-export const getMySendCountToday   = ()       => authRpc('get_my_send_count_today', {});
-
-// ---------- PUSH ----------
-
-export async function savePushSubscription(sub) {
-  const uid = getSession().user_id;
-  await authFetch(`/rest/v1/push_subscriptions`, {
-    method: 'POST',
-    headers: { Prefer: 'resolution=merge-duplicates' },
-    body: JSON.stringify([{
-      user_id: uid,
-      endpoint: sub.endpoint,
-      p256dh: sub.keys.p256dh,
-      auth: sub.keys.auth,
-    }]),
-  });
-}
-
-export async function deletePushSubscription(endpoint) {
-  await authFetch(`/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(endpoint)}`, { method: 'DELETE' });
 }
